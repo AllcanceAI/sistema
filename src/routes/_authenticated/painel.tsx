@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Car, Clock, FileCheck2, TriangleAlert, Plus, DollarSign } from "lucide-react";
+import { useState } from "react";
+import { Car, Clock, FileCheck2, TriangleAlert, Plus, DollarSign, Send, Search, Calendar, CheckSquare, MessageSquare, AlertCircle, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { useMe, can, hasRole } from "@/hooks/useMe";
 import { OS_STATUS_LABELS, ROLE_LABELS, APPROVAL_STAGE_LABELS } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/_authenticated/painel")({
   head: () => ({
@@ -23,6 +25,7 @@ export const Route = createFileRoute("/_authenticated/painel")({
 
 function Painel() {
   const { data: me } = useMe();
+  const [searchTerm, setSearchTerm] = useState("");
 
   const orders = useQuery({
     queryKey: ["orders", "painel"],
@@ -30,10 +33,10 @@ function Painel() {
       const { data, error } = await supabase
         .from("service_orders")
         .select(
-          "id, number, mode, status, complaint, promised_at, created_at, mechanic_id, vehicles(plate, brand, model), clients(name), companies(name)",
+          "id, number, mode, status, complaint, promised_at, created_at, mechanic_id, vehicles(plate, brand, model), clients(name, phone), companies(name, phone)",
         )
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(100);
       if (error) throw new Error(error.message);
       return data ?? [];
     },
@@ -62,7 +65,7 @@ function Painel() {
     },
   });
 
-  const list = orders.data ?? [];
+  const list = (orders.data ?? []) as any[];
   const mine = hasRole(me, "mecanico") ? list.filter((o) => o.mechanic_id === me?.userId) : list;
   const abertas = list.filter((o) => !["entregue", "cancelado"].includes(o.status));
   const atrasadas = abertas.filter((o) => o.promised_at && new Date(o.promised_at) < new Date());
@@ -70,6 +73,90 @@ function Painel() {
     (a) => me?.roles.includes(a.required_role as never) || hasRole(me, "dono"),
   );
 
+  // Filter list by search term
+  const filteredList = list.filter((o) => {
+    const term = searchTerm.toLowerCase();
+    const plate = o.vehicles?.plate?.toLowerCase() ?? "";
+    const client = o.clients?.name?.toLowerCase() ?? o.companies?.name?.toLowerCase() ?? "";
+    const num = String(o.number);
+    return plate.includes(term) || client.includes(term) || num.includes(term);
+  });
+
+  const isSecretaria = hasRole(me, "secretaria");
+
+  if (isSecretaria) {
+    return (
+      <AppShell
+        title={`Olá, ${me?.fullName?.split(" ")[0] || "Recepcionista"}`}
+        subtitle="Painel de Controle e Recepção"
+        action={
+          <Button asChild size="sm">
+            <Link to="/os/nova">
+              <Plus className="size-4" /> Registrar Entrada / OS
+            </Link>
+          </Button>
+        }
+      >
+        {/* KPI Row */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat icon={<Car className="size-4" />} label="Carros na Oficina" value={abertas.length} />
+          <Stat
+            icon={<Clock className="size-4" />}
+            label="Prazos Estourados"
+            value={atrasadas.length}
+            tone={atrasadas.length > 0 ? "warning" : "default"}
+          />
+          <Stat
+            icon={<FileCheck2 className="size-4" />}
+            label="Assinaturas Pendentes"
+            value={minhasPendentes.length}
+          />
+          <Stat
+            icon={<AlertCircle className="size-4" />}
+            label="Peças p/ Conferir"
+            value={list.filter((o) => o.status === "compra_pecas").length}
+          />
+        </div>
+
+        {/* Quick Search */}
+        <div className="mt-4 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar veículo pela placa, cliente ou número da OS..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        {/* Dynamic Scheduler Checklist / agendados */}
+        <section className="mt-4 panel p-4">
+          <div className="flex items-center gap-2 mb-3 border-b pb-2">
+            <Calendar className="size-5 text-primary" />
+            <h2 className="font-display text-lg font-bold">Agenda de Veículos & Confirmação</h2>
+          </div>
+          <AgendaChecklist list={list} />
+        </section>
+
+        {/* Active OS Panel */}
+        <section className="mt-4">
+          <h2 className="mb-3 font-display text-xl">Ordens de Serviço Ativas</h2>
+          <div className="space-y-2">
+            {(searchTerm ? filteredList : abertas).slice(0, 30).map((o) => (
+              <OrderCard key={o.id} order={o} />
+            ))}
+            {(searchTerm ? filteredList : abertas).length === 0 ? (
+              <p className="panel p-6 text-center text-sm text-muted-foreground">
+                Nenhum veículo ativo encontrado.
+              </p>
+            ) : null}
+          </div>
+        </section>
+      </AppShell>
+    );
+  }
+
+  // Default dashboard for Dono/Mecanico/Gerente
   return (
     <AppShell
       title={`Olá, ${me?.fullName?.split(" ")[0] || "equipe"}`}
@@ -151,6 +238,111 @@ function Painel() {
         </div>
       </section>
     </AppShell>
+  );
+}
+
+// Sub-component for scheduled checklist & WhatsApp notifications
+function AgendaChecklist({ list }: { list: any[] }) {
+  const [confirmedIds, setConfirmedIds] = useState<Record<string, boolean>>({});
+
+  // Filter service orders that have promised_at set in the future/today
+  const upcoming = list
+    .filter((o) => o.promised_at && ["recebido", "checklist"].includes(o.status))
+    .sort((a, b) => new Date(a.promised_at).getTime() - new Date(b.promised_at).getTime());
+
+  const handleSendReminder = (o: any) => {
+    const clientName = o.clients?.name ?? o.companies?.name ?? "Cliente";
+    const rawPhone = o.clients?.phone ?? o.companies?.phone ?? "";
+    const plate = o.vehicles?.plate ?? "Sem Placa";
+    const brandModel = `${o.vehicles?.brand ?? ""} ${o.vehicles?.model ?? ""}`.trim() || "Veículo";
+
+    const dateStr = new Date(o.promised_at).toLocaleString("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+
+    // Clean phone number (leave only digits, add 55 country code if not present)
+    let phone = rawPhone.replace(/\D/g, "");
+    if (phone.length === 11 && !phone.startsWith("55")) {
+      phone = "55" + phone;
+    }
+
+    const message = `Olá, *${clientName}*! Tudo bem? Passando para lembrar do agendamento de manutenção do seu veículo *${brandModel}* (Placa: *${plate}*) marcado para o dia *${dateStr}* na Oficina HM. Confirmamos sua vinda?`;
+
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank");
+  };
+
+  const toggleConfirm = (id: string) => {
+    setConfirmedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  if (upcoming.length === 0) {
+    return (
+      <p className="text-center py-6 text-xs text-muted-foreground italic">
+        Nenhum veículo agendado/prometido para as próximas datas.
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {upcoming.slice(0, 10).map((o) => {
+        const isConfirmed = !!confirmedIds[o.id];
+        return (
+          <div
+            key={o.id}
+            className={`flex items-start justify-between gap-3 p-3.5 rounded-lg border transition-all ${
+              isConfirmed
+                ? "bg-green-500/5 border-green-500/20 opacity-80"
+                : "bg-secondary/40 hover:bg-secondary/60"
+            }`}
+          >
+            <div className="flex gap-2.5 items-start min-w-0">
+              <button
+                type="button"
+                onClick={() => toggleConfirm(o.id)}
+                className={`mt-0.5 shrink-0 size-5 flex items-center justify-center rounded border transition-colors ${
+                  isConfirmed
+                    ? "bg-green-600 border-green-700 text-white"
+                    : "border-slate-400 hover:border-slate-500"
+                }`}
+                aria-label="Confirmar presença"
+              >
+                {isConfirmed && <CheckSquare className="size-3.5" />}
+              </button>
+              <div className="min-w-0 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <span className={`font-semibold tracking-wide uppercase ${isConfirmed ? "line-through text-muted-foreground" : ""}`}>
+                    {o.vehicles?.plate ?? "SEM PLACA"}
+                  </span>
+                  <Badge variant="outline" className="text-[10px] h-4">
+                    {new Date(o.promised_at).toLocaleDateString("pt-BR")}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {o.vehicles?.brand ?? ""} {o.vehicles?.model ?? ""}
+                </p>
+                <p className="text-xs font-semibold text-primary mt-1 truncate">
+                  {o.clients?.name ?? o.companies?.name ?? "Particular"}
+                </p>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-8 shrink-0 hover:bg-primary/10 hover:text-primary"
+              onClick={() => handleSendReminder(o)}
+              title="Preparar lembrete no WhatsApp"
+            >
+              <MessageSquare className="size-4" />
+            </Button>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
