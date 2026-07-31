@@ -79,21 +79,49 @@ function LoginPage() {
 
   return (
     <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-slate-950 px-4 py-10">
-      {/* Dynamic Background Glows matching the logo's red and blue stripes */}
-      <div className="absolute -left-48 -top-48 h-96 w-96 rounded-full bg-blue-600/10 blur-[128px]" />
-      <div className="absolute -right-48 -bottom-48 h-96 w-96 rounded-full bg-red-600/10 blur-[128px]" />
+      {/* Embedded Animation Styles */}
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-8px) scale(1.02); }
+        }
+        @keyframes pulseGlow {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(1.15); }
+        }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(24px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-float {
+          animation: float 5s ease-in-out infinite;
+        }
+        .animate-pulse-glow-1 {
+          animation: pulseGlow 10s ease-in-out infinite;
+        }
+        .animate-pulse-glow-2 {
+          animation: pulseGlow 12s ease-in-out infinite-reverse;
+        }
+        .animate-fade-in-up {
+          animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
+
+      {/* Dynamic Background Glows */}
+      <div className="absolute -left-48 -top-48 h-96 w-96 rounded-full bg-blue-600/10 blur-[128px] animate-pulse-glow-1" />
+      <div className="absolute -right-48 -bottom-48 h-96 w-96 rounded-full bg-red-600/10 blur-[128px] animate-pulse-glow-2" />
       <div className="absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500/5 blur-[160px]" />
 
-      <div className="relative w-full max-w-md">
-        {/* Card wrapper with neon accent glow border */}
-        <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-8 shadow-2xl backdrop-blur-xl">
+      <div className="relative w-full max-w-md animate-fade-in-up">
+        {/* Card wrapper */}
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-8 shadow-2xl backdrop-blur-xl transition-all duration-300 hover:border-slate-700/50">
           <div className="mb-8 text-center">
-            {/* Logo Container */}
-            <div className="inline-block transform transition-transform hover:scale-105 duration-300">
+            {/* Logo Container with floating animation */}
+            <div className="inline-block animate-float">
               <img
                 src={hmLogo.url}
                 alt="HM Auto Elétrica"
-                className="mx-auto h-auto w-52 max-w-full"
+                className="mx-auto h-auto w-52 max-w-full drop-shadow-[0_0_15px_rgba(59,130,246,0.2)]"
               />
             </div>
             <p className="mt-4 text-xs font-semibold tracking-wider text-slate-400 uppercase">
@@ -103,18 +131,18 @@ function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {firstAccess && (
-              <div className="flex gap-2 rounded-lg bg-blue-950/40 p-3 text-xs text-blue-300 border border-blue-900/30">
-                <ShieldAlert className="size-4 shrink-0" />
+              <div className="flex gap-2 rounded-lg bg-blue-950/40 p-3 text-xs text-blue-300 border border-blue-900/30 animate-pulse">
+                <ShieldAlert className="size-4 shrink-0 text-blue-400" />
                 <p>Nenhuma conta master foi encontrada. Insira o e-mail e senha desejados para criar o usuário administrador.</p>
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-xs font-semibold tracking-wide text-slate-300">
+            <div className="space-y-2 group">
+              <Label htmlFor="email" className="text-xs font-semibold tracking-wide text-slate-350 transition-colors group-focus-within:text-blue-400">
                 E-mail
               </Label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
+                <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-blue-400" />
                 <Input
                   id="email"
                   type="email"
@@ -124,19 +152,19 @@ function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="username"
-                  className="h-11 border-slate-800 bg-slate-950/80 pl-10 text-slate-100 placeholder:text-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className="h-11 border-slate-800 bg-slate-950/80 pl-10 text-slate-100 placeholder:text-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 hover:border-slate-700 focus:scale-[1.01]"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 group">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-xs font-semibold tracking-wide text-slate-300">
+                <Label htmlFor="password" className="text-xs font-semibold tracking-wide text-slate-350 transition-colors group-focus-within:text-blue-400">
                   Senha
                 </Label>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
+                <Lock className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-blue-400" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -146,7 +174,7 @@ function LoginPage() {
                   required
                   minLength={firstAccess ? 8 : 1}
                   autoComplete="current-password"
-                  className="h-11 border-slate-800 bg-slate-950/80 px-10 text-slate-100 placeholder:text-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className="h-11 border-slate-800 bg-slate-950/80 px-10 text-slate-100 placeholder:text-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 hover:border-slate-700 focus:scale-[1.01]"
                 />
                 <button
                   type="button"
@@ -161,7 +189,7 @@ function LoginPage() {
 
             <Button
               type="submit"
-              className="relative mt-2 w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 font-semibold text-white shadow-lg hover:from-blue-500 hover:to-indigo-500 focus:ring-2 focus:ring-blue-600/50 hover:shadow-blue-500/20 transition-all duration-300"
+              className="relative mt-2 w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 font-semibold text-white shadow-lg hover:from-blue-500 hover:to-indigo-500 focus:ring-2 focus:ring-blue-600/50 hover:shadow-blue-500/20 active:scale-[0.98] transition-all duration-350 ease-out cursor-pointer"
               disabled={loading || bootstrap.isPending}
             >
               {loading ? (
