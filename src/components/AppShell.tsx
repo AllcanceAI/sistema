@@ -63,7 +63,7 @@ export function AppShell({
           <img
             src={hmLogo.url}
             alt="HM Auto Elétrica"
-            className="mb-2 w-full max-w-[176px] rounded-md bg-surface p-2"
+            className="mb-2 w-full max-w-[176px]"
           />
           <p className="text-xs text-sidebar-foreground/60">Gestão de ordens de serviço</p>
         </div>
