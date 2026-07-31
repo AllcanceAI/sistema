@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -86,10 +86,44 @@ function OsDetalhe() {
     },
   });
 
+  const mechanics = useQuery({
+    queryKey: ["mechanics"],
+    queryFn: async () => {
+      const { data: rolesData, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "mecanico");
+      if (rolesError) throw new Error(rolesError.message);
+      const ids = (rolesData ?? []).map((r) => r.user_id);
+      if (ids.length === 0) return [];
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", ids)
+        .eq("active", true)
+        .order("full_name");
+      if (profilesError) throw new Error(profilesError.message);
+      return profiles ?? [];
+    },
+  });
+
+  const approvals = useQuery({
+    queryKey: ["approvals", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("approvals")
+        .select("*")
+        .eq("service_order_id", id)
+        .order("created_at");
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+  });
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["order", id] });
     queryClient.invalidateQueries({ queryKey: ["orders"] });
-    queryClient.invalidateQueries({ queryKey: ["approvals"] });
+    queryClient.invalidateQueries({ queryKey: ["approvals", id] });
   };
 
   const updateOrder = useMutation({
@@ -125,6 +159,62 @@ function OsDetalhe() {
   }
 
   const editable = can(me, "cadastrar_os") || os.mechanic_id === me?.userId;
+  const approvalsList = approvals.data ?? [];
+
+  // Helper variables for workflow evaluation
+  const internalApproved = approvalsList.some(
+    (a) => a.stage === "orcamento" && (a.required_role === "dono" || a.required_role === "gerente") && a.decision === "aprovado"
+  );
+
+  const teamMechanicSigned = approvalsList.some(
+    (a) => a.stage === "orcamento" && a.required_role === "mecanico" && a.decision === "aprovado"
+  );
+  const teamSecretarySigned = approvalsList.some(
+    (a) => a.stage === "orcamento" && a.required_role === "secretaria" && a.decision === "aprovado"
+  );
+  const clientSigned = approvalsList.some(
+    (a) => a.stage === "orcamento" && a.required_role === "funcionario" && a.decision === "aprovado"
+  );
+
+  const partsOrderApprovedByDono = approvalsList.some(
+    (a) => a.stage === "compra_pecas" && a.required_role === "dono" && a.decision === "aprovado"
+  );
+
+  const partsArrivalSignedBySecretary = approvalsList.some(
+    (a) => a.stage === "compra_pecas" && a.required_role === "secretaria" && a.decision === "aprovado"
+  );
+  const partsArrivalSignedByMechanic = approvalsList.some(
+    (a) => a.stage === "compra_pecas" && a.required_role === "mecanico" && a.decision === "aprovado"
+  );
+
+  // Stepper steps configuration
+  const getActiveStep = () => {
+    switch (os.status) {
+      case "recebido":
+      case "checklist":
+        return 0; // Entrada
+      case "diagnostico":
+        return 1; // Diagnóstico
+      case "orcamento":
+        return 2; // Aprovação Interna (Dono/Gerente)
+      case "aguardando_aprovacao":
+        return 3; // Aprovação da Equipe e Cliente
+      case "aprovado":
+        return 4; // Pedido de Peças (Autorização)
+      case "compra_pecas":
+        return 5; // Recebimento de Peças
+      case "em_execucao":
+        return 6; // Execução do Serviço
+      case "concluido":
+        return 7; // Finalizado (Pronto para Entrega)
+      case "entregue":
+        return 8; // Entregue
+      default:
+        return 0;
+    }
+  };
+
+  const activeStepIndex = getActiveStep();
 
   return (
     <AppShell
@@ -138,6 +228,7 @@ function OsDetalhe() {
         </Button>
       }
     >
+      {/* General OS info panel */}
       <section className="panel p-4">
         <div className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2 md:grid-cols-3">
           <Info label="Veículo" value={`${os.vehicles?.brand ?? ""} ${os.vehicles?.model ?? ""} ${os.vehicles?.year ?? ""}`} />
@@ -146,6 +237,12 @@ function OsDetalhe() {
           <Info label="Cliente" value={os.clients?.name ?? "—"} />
           <Info label="Telefone" value={os.clients?.phone ?? os.companies?.phone ?? "—"} />
           <Info label="E-mail" value={os.clients?.email ?? "—"} />
+          <Info
+            label="Mecânico Responsável"
+            value={
+              mechanics.data?.find((m) => m.id === os.mechanic_id)?.full_name ?? "Não designado"
+            }
+          />
           <Info
             label="Prazo estimado"
             value={
@@ -161,9 +258,9 @@ function OsDetalhe() {
         </div>
 
         {editable ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label>Situação</Label>
+              <Label>Situação Manual</Label>
               <Select
                 value={os.status}
                 onValueChange={(status) => updateOrder.mutate({ status })}
@@ -180,6 +277,27 @@ function OsDetalhe() {
                 </SelectContent>
               </Select>
             </div>
+            
+            <div className="space-y-2">
+              <Label>Mecânico Responsável</Label>
+              <Select
+                value={os.mechanic_id ?? "none"}
+                onValueChange={(val) => updateOrder.mutate({ mechanic_id: val === "none" ? null : val })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Designar mecânico..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {(mechanics.data ?? []).map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="prazo">Prazo de entrega</Label>
               <Input
@@ -197,6 +315,63 @@ function OsDetalhe() {
         ) : null}
       </section>
 
+      {/* Stepper / Active Stage Card */}
+      <section className="panel mt-4 overflow-hidden border-t-4 border-t-primary">
+        <header className="bg-muted/40 px-4 py-3 border-b">
+          <h2 className="font-display text-lg uppercase tracking-wide text-primary">Acompanhamento e Assinaturas</h2>
+        </header>
+
+        {/* Stepper headers */}
+        <div className="grid grid-cols-2 gap-2 p-4 md:grid-cols-9 text-center border-b text-[11px] font-semibold text-muted-foreground bg-muted/10">
+          {[
+            "Entrada",
+            "Diagnóstico",
+            "Aprovação Interna",
+            "Aprovação Equipe/Cliente",
+            "Pedido de Peças",
+            "Recebimento de Peças",
+            "Em Execução",
+            "Concluído",
+            "Entregue",
+          ].map((step, idx) => (
+            <div
+              key={idx}
+              className={`p-2 rounded-md ${
+                idx === activeStepIndex
+                  ? "bg-primary text-primary-foreground shadow"
+                  : idx < activeStepIndex
+                    ? "text-success bg-success/10 font-bold"
+                    : ""
+              }`}
+            >
+              {idx < activeStepIndex ? "✓ " : ""}
+              {step}
+            </div>
+          ))}
+        </div>
+
+        {/* Dynamic active step panel */}
+        <div className="p-5">
+          <ActiveStepPanel
+            activeStepIndex={activeStepIndex}
+            os={os}
+            me={me}
+            updateOrder={updateOrder}
+            approvals={approvalsList}
+            invalidate={invalidate}
+            mechanics={mechanics.data ?? []}
+            internalApproved={internalApproved}
+            teamMechanicSigned={teamMechanicSigned}
+            teamSecretarySigned={teamSecretarySigned}
+            clientSigned={clientSigned}
+            partsOrderApprovedByDono={partsOrderApprovedByDono}
+            partsArrivalSignedBySecretary={partsArrivalSignedBySecretary}
+            partsArrivalSignedByMechanic={partsArrivalSignedByMechanic}
+          />
+        </div>
+      </section>
+
+      {/* Details tabs */}
       <Tabs defaultValue="entrada" className="mt-4">
         <TabsList className="grid w-full grid-cols-3 md:w-auto md:grid-cols-6">
           <TabsTrigger value="entrada">Entrada</TabsTrigger>
@@ -275,8 +450,6 @@ function OsDetalhe() {
           <PaymentsPanel serviceOrderId={id} />
         </TabsContent>
 
-
-
         <TabsContent value="aprovacoes" className="mt-3">
           <ApprovalsPanel serviceOrderId={id} onChange={invalidate} />
         </TabsContent>
@@ -285,11 +458,472 @@ function OsDetalhe() {
   );
 }
 
+// Sub-component for managing the stepper flow interface
+function ActiveStepPanel({
+  activeStepIndex,
+  os,
+  me,
+  updateOrder,
+  approvals,
+  invalidate,
+  mechanics,
+  internalApproved,
+  teamMechanicSigned,
+  teamSecretarySigned,
+  clientSigned,
+  partsOrderApprovedByDono,
+  partsArrivalSignedBySecretary,
+  partsArrivalSignedByMechanic,
+}: {
+  activeStepIndex: number;
+  os: any;
+  me: any;
+  updateOrder: any;
+  approvals: any[];
+  invalidate: () => void;
+  mechanics: any[];
+  internalApproved: boolean;
+  teamMechanicSigned: boolean;
+  teamSecretarySigned: boolean;
+  clientSigned: boolean;
+  partsOrderApprovedByDono: boolean;
+  partsArrivalSignedBySecretary: boolean;
+  partsArrivalSignedByMechanic: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [signatureName, setSignatureName] = useState(me?.fullName ?? "");
+
+  const handleSign = useMutation({
+    mutationFn: async (input: { stage: string; role: AppRole; decision?: "aprovado" | "reprovado" }) => {
+      if (!signatureName.trim()) {
+        throw new Error("Por favor, digite seu nome completo para assinar.");
+      }
+      // Insert approval
+      const { error } = await supabase.from("approvals").insert({
+        service_order_id: os.id,
+        stage: input.stage as any,
+        required_role: input.role,
+        decision: input.decision ?? "aprovado",
+        signature: signatureName.trim(),
+        decided_at: new Date().toISOString(),
+        decided_by: me?.userId ?? null,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Assinatura registrada com sucesso!");
+      invalidate();
+      setSignatureName(me?.fullName ?? "");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  // Autocomplete updates based on workflow state transition
+  const transitionToStatus = (status: string) => {
+    updateOrder.mutate({ status });
+  };
+
+  switch (activeStepIndex) {
+    case 0: // Entrada
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-secondary/20 p-4 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">Fase 1: Entrada do Veículo</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">O veículo deu entrada na oficina. Defina o mecânico responsável e inicie o laudo.</p>
+            </div>
+            {hasRole(me, "dono", "gerente", "secretaria") && (
+              <Button
+                onClick={() => {
+                  if (!os.mechanic_id) {
+                    toast.error("Por favor, selecione um mecânico para assumir o serviço antes de prosseguir.");
+                    return;
+                  }
+                  transitionToStatus("diagnostico");
+                }}
+              >
+                Iniciar Diagnóstico <Wrench className="size-4 ml-1.5" />
+              </Button>
+            )}
+          </div>
+          {!os.mechanic_id && (
+            <div className="text-sm p-3 bg-yellow-50 dark:bg-yellow-950/20 text-yellow-800 dark:text-yellow-300 rounded border border-yellow-200/50">
+              Aguardando a designação do mecânico para a realização do diagnóstico.
+            </div>
+          )}
+        </div>
+      );
+
+    case 1: // Diagnóstico
+      const hasDiagnosis = !!os.diagnosis?.trim() && !!os.solution?.trim();
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-secondary/20 p-4 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">Fase 2: Diagnóstico e Proposta</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">O mecânico deve realizar a análise, lançar o laudo (diagnóstico) e propor a solução na aba "Laudo".</p>
+            </div>
+            {hasDiagnosis && (os.mechanic_id === me?.userId || hasRole(me, "dono", "gerente", "secretaria")) && (
+              <Button
+                onClick={() => {
+                  transitionToStatus("orcamento");
+                }}
+              >
+                Mandar para Aprovação Interna <CheckCircle2 className="size-4 ml-1.5" />
+              </Button>
+            )}
+          </div>
+          {!hasDiagnosis ? (
+            <div className="text-sm p-3 bg-blue-50 dark:bg-blue-950/20 text-blue-800 dark:text-blue-300 rounded border border-blue-200/50">
+              Mecânico designado: <strong>{mechanics.find((m) => m.id === os.mechanic_id)?.full_name ?? "Não designado"}</strong>.
+              Aguardando a inserção do laudo técnico (diagnóstico e solução proposta).
+            </div>
+          ) : (
+            <div className="text-sm p-3 bg-green-50 dark:bg-green-950/20 text-green-800 dark:text-green-300 rounded border border-green-200/50">
+              Diagnóstico e solução preenchidos! Pronto para enviar para a aprovação interna da gerência.
+            </div>
+          )}
+        </div>
+      );
+
+    case 2: // Aprovação Interna (Dono/Gerente)
+      const canSignInternal = hasRole(me, "dono", "gerente");
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-secondary/20 p-4 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">Fase 3: Aprovação Interna</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">O orçamento e o laudo técnico devem ser assinados pelo Dono ou Gerente antes de serem apresentados ao cliente.</p>
+            </div>
+          </div>
+
+          {internalApproved ? (
+            <div className="space-y-3">
+              <div className="text-sm p-3 bg-green-50 dark:bg-green-950/20 text-green-800 dark:text-green-300 rounded border border-green-200/50">
+                Aprovação interna assinada com sucesso!
+              </div>
+              <Button onClick={() => transitionToStatus("aguardando_aprovacao")}>
+                Avançar para Assinatura da Equipe & Cliente
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="text-sm p-3 bg-yellow-50 dark:bg-yellow-950/20 text-yellow-800 dark:text-yellow-300 rounded border border-yellow-200/50">
+                Aguardando assinatura do Dono ou Gerente.
+              </div>
+              {canSignInternal && (
+                <div className="panel p-4 space-y-3 bg-background">
+                  <Label htmlFor="sig-internal">Assinatura de Aprovação Interna (Nome Completo)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="sig-internal"
+                      placeholder="Seu nome completo"
+                      value={signatureName}
+                      onChange={(e) => setSignatureName(e.target.value)}
+                    />
+                    <Button onClick={() => handleSign.mutate({ stage: "orcamento", role: me?.roles.includes("dono") ? "dono" : "gerente" })}>
+                      Assinar e Autorizar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+
+    case 3: // Aprovação da Equipe e Cliente
+      const isMecanicoResponsavel = os.mechanic_id === me?.userId;
+      const isSecretaria = hasRole(me, "secretaria", "dono");
+
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-secondary/20 p-4 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">Fase 4: Assinaturas da Equipe & Cliente</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">O mecânico designado e a secretária devem assinar o plano definitivo. Em seguida, o cliente aprova o orçamento.</p>
+            </div>
+            {teamMechanicSigned && teamSecretarySigned && clientSigned && (
+              <Button onClick={() => transitionToStatus("aprovado")}>
+                Avançar para Pedido de Peças
+              </Button>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {/* Mechanic signature card */}
+            <div className="panel p-3 space-y-2 bg-background">
+              <h4 className="font-medium text-sm flex items-center gap-1">
+                {teamMechanicSigned ? "✓ " : ""} Mecânico
+              </h4>
+              <p className="text-xs text-muted-foreground">Assinatura do mecânico responsável.</p>
+              {teamMechanicSigned ? (
+                <Badge className="bg-success text-success-foreground">Assinado</Badge>
+              ) : isMecanicoResponsavel ? (
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Nome completo"
+                    value={signatureName}
+                    onChange={(e) => setSignatureName(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Button size="sm" className="w-full" onClick={() => handleSign.mutate({ stage: "orcamento", role: "mecanico" })}>
+                    Assinar
+                  </Button>
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground italic">Aguardando mecânico</span>
+              )}
+            </div>
+
+            {/* Secretary signature card */}
+            <div className="panel p-3 space-y-2 bg-background">
+              <h4 className="font-medium text-sm flex items-center gap-1">
+                {teamSecretarySigned ? "✓ " : ""} Secretaria
+              </h4>
+              <p className="text-xs text-muted-foreground">Assinatura da secretária/recepcionista.</p>
+              {teamSecretarySigned ? (
+                <Badge className="bg-success text-success-foreground">Assinado</Badge>
+              ) : isSecretaria ? (
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Nome completo"
+                    value={signatureName}
+                    onChange={(e) => setSignatureName(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Button size="sm" className="w-full" onClick={() => handleSign.mutate({ stage: "orcamento", role: "secretaria" })}>
+                    Assinar
+                  </Button>
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground italic">Aguardando secretaria</span>
+              )}
+            </div>
+
+            {/* Client signature card */}
+            <div className="panel p-3 space-y-2 bg-background">
+              <h4 className="font-medium text-sm flex items-center gap-1">
+                {clientSigned ? "✓ " : ""} Cliente
+              </h4>
+              <p className="text-xs text-muted-foreground">Confirmação de aceite do cliente.</p>
+              {clientSigned ? (
+                <Badge className="bg-success text-success-foreground">Aprovado pelo Cliente</Badge>
+              ) : hasRole(me, "secretaria", "gerente", "dono") ? (
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Nome do cliente (autorização)"
+                    value={signatureName}
+                    onChange={(e) => setSignatureName(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Button size="sm" className="w-full" onClick={() => handleSign.mutate({ stage: "orcamento", role: "funcionario" })}>
+                    Confirmar Aceite
+                  </Button>
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground italic">Aguardando aceite</span>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+
+    case 4: // Pedido de Peças (Autorização)
+      const canSignPurchase = hasRole(me, "dono");
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-secondary/20 p-4 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">Fase 5: Pedido de Peças</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Após aceitação do cliente, o Dono deve autorizar e assinar a compra/pedido das peças necessárias no sistema.</p>
+            </div>
+          </div>
+
+          {partsOrderApprovedByDono ? (
+            <div className="space-y-3">
+              <div className="text-sm p-3 bg-green-50 dark:bg-green-950/20 text-green-800 dark:text-green-300 rounded border border-green-200/50">
+                Pedido de compra e autorização assinada pelo Dono!
+              </div>
+              <Button onClick={() => transitionToStatus("compra_pecas")}>
+                Avançar para Recebimento de Peças
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="text-sm p-3 bg-yellow-50 dark:bg-yellow-950/20 text-yellow-800 dark:text-yellow-300 rounded border border-yellow-200/50">
+                Aguardando assinatura do Dono para a compra de peças.
+              </div>
+              {canSignPurchase && (
+                <div className="panel p-4 space-y-3 bg-background">
+                  <Label htmlFor="sig-purchase">Assinatura de Compra de Peças (Dono)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="sig-purchase"
+                      placeholder="Nome do Dono"
+                      value={signatureName}
+                      onChange={(e) => setSignatureName(e.target.value)}
+                    />
+                    <Button onClick={() => handleSign.mutate({ stage: "compra_pecas", role: "dono" })}>
+                      Autorizar Compra
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+
+    case 5: // Recebimento de Peças
+      const isSec = hasRole(me, "secretaria", "dono");
+      const isMec = os.mechanic_id === me?.userId;
+
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-secondary/20 p-4 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">Fase 6: Recebimento e Conferência de Peças</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">As peças chegaram. A recepcionista deve tirar uma foto das peças no sistema, assinar e o mecânico também assina.</p>
+            </div>
+            {partsArrivalSignedBySecretary && partsArrivalSignedByMechanic && (
+              <Button onClick={() => transitionToStatus("em_execucao")}>
+                Liberar para Execução do Serviço
+              </Button>
+            )}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
+              <MediaSection
+                serviceOrderId={os.id}
+                stage="peca_nova"
+                title="Foto das peças novas recebidas"
+              />
+            </div>
+
+            <div className="space-y-3">
+              {/* Secretary parts arrival signature */}
+              <div className="panel p-4 space-y-2 bg-background">
+                <h4 className="font-medium text-sm flex items-center gap-1">
+                  {partsArrivalSignedBySecretary ? "✓ " : ""} Confirmação da Recepcionista
+                </h4>
+                <p className="text-xs text-muted-foreground">Assinar atestando o recebimento físico e upload da foto.</p>
+                {partsArrivalSignedBySecretary ? (
+                  <Badge className="bg-success text-success-foreground">Confirmado</Badge>
+                ) : isSec ? (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Seu nome"
+                      value={signatureName}
+                      onChange={(e) => setSignatureName(e.target.value)}
+                    />
+                    <Button onClick={() => handleSign.mutate({ stage: "compra_pecas", role: "secretaria" })}>
+                      Assinar Recebimento
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">Aguardando recepcionista</span>
+                )}
+              </div>
+
+              {/* Mechanic parts arrival signature */}
+              <div className="panel p-4 space-y-2 bg-background">
+                <h4 className="font-medium text-sm flex items-center gap-1">
+                  {partsArrivalSignedByMechanic ? "✓ " : ""} Confirmação do Mecânico
+                </h4>
+                <p className="text-xs text-muted-foreground">Assinar atestando conformidade das peças recebidas.</p>
+                {partsArrivalSignedByMechanic ? (
+                  <Badge className="bg-success text-success-foreground">Confirmado</Badge>
+                ) : isMec ? (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Seu nome"
+                      value={signatureName}
+                      onChange={(e) => setSignatureName(e.target.value)}
+                    />
+                    <Button onClick={() => handleSign.mutate({ stage: "compra_pecas", role: "mecanico" })}>
+                      Aprovar Peças
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">Aguardando mecânico</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+
+    case 6: // Execução
+      const isMecExec = os.mechanic_id === me?.userId || hasRole(me, "dono", "gerente");
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-secondary/20 p-4 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">Fase 7: Execução do Serviço</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">O veículo está com as peças liberadas. Mecânico deve realizar a manutenção e concluir o serviço.</p>
+            </div>
+            {isMecExec && (
+              <Button
+                onClick={() => {
+                  transitionToStatus("concluido");
+                }}
+              >
+                Concluir e Finalizar Serviço <CheckCircle2 className="size-4 ml-1.5" />
+              </Button>
+            )}
+          </div>
+          <div className="text-sm p-3 bg-blue-50 dark:bg-blue-950/20 text-blue-800 dark:text-blue-300 rounded border border-blue-200/50">
+            Veículo em manutenção pelo mecânico: <strong>{mechanics.find((m) => m.id === os.mechanic_id)?.full_name ?? "—"}</strong>.
+          </div>
+        </div>
+      );
+
+    case 7: // Concluído
+      const isSecDelivery = hasRole(me, "secretaria", "gerente", "dono");
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-secondary/20 p-4 rounded-lg">
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">Fase 8: Pronto para Entrega</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">O serviço foi finalizado. Aguardando a retirada do veículo e a entrega formal ao cliente pela secretaria.</p>
+            </div>
+            {isSecDelivery && (
+              <Button
+                onClick={() => {
+                  transitionToStatus("entregue");
+                }}
+              >
+                Confirmar Entrega do Veículo <CheckCircle2 className="size-4 ml-1.5" />
+              </Button>
+            )}
+          </div>
+          <div className="text-sm p-3 bg-green-50 dark:bg-green-950/20 text-green-800 dark:text-green-300 rounded border border-green-200/50">
+            Serviço finalizado pelo mecânico! Pronto para entrega.
+          </div>
+        </div>
+      );
+
+    case 8: // Entregue
+      return (
+        <div className="space-y-4 text-center p-6 bg-success/10 border border-success/30 rounded-xl">
+          <CheckCircle2 className="size-12 mx-auto text-success" />
+          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Ordem de Serviço Encerrada!</h3>
+          <p className="text-sm text-muted-foreground">O veículo foi entregue ao cliente e todos os processos de assinatura e conferência foram finalizados com sucesso.</p>
+        </div>
+      );
+
+    default:
+      return null;
+  }
+}
+
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="break-words">{value?.trim() ? value : "—"}</p>
+      <p className="break-words font-medium">{value?.trim() ? value : "—"}</p>
     </div>
   );
 }
