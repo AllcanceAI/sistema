@@ -243,40 +243,40 @@ function LiveCard({ order }: { order: LiveOrder }) {
     <Link
       to="/os/$id"
       params={{ id: order.id }}
-      className="block rounded-lg border border-l-4 border-slate-800 border-l-primary bg-slate-900 p-3.5 shadow transition-all duration-200 hover:border-slate-700/80 hover:bg-slate-850 active:scale-[0.98]"
+      className="block rounded-lg border border-l-4 border-slate-800 border-l-primary bg-slate-900 p-2.5 shadow transition-all duration-200 hover:border-slate-700/80 hover:bg-slate-850 active:scale-[0.98]"
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
-        <p className="font-display text-lg font-bold leading-none text-slate-100 uppercase tracking-wide">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-1">
+        <p className="font-display text-sm md:text-base font-bold leading-none text-slate-100 uppercase tracking-wide truncate">
           {order.vehicles?.plate ?? "SEM PLACA"}
         </p>
-        <Badge variant={order.mode === "express" ? "default" : "secondary"} className="shrink-0 h-5 text-[10px]">
-          {order.mode === "express" ? "Express" : "Análise"}
+        <Badge variant={order.mode === "express" ? "default" : "secondary"} className="shrink-0 h-4 text-[9px] px-1">
+          {order.mode === "express" ? "Exp" : "Anál"}
         </Badge>
       </div>
 
-      <p className="mt-2 flex items-center gap-1.5 truncate text-[11px] text-slate-400">
-        <Car className="size-3.5 shrink-0 text-slate-500" />
+      <p className="mt-1.5 flex items-center gap-1 truncate text-[10px] text-slate-400">
+        <Car className="size-3 shrink-0 text-slate-500" />
         <span className="truncate">
           {order.vehicles?.brand ?? ""} {order.vehicles?.model ?? ""} {order.vehicles?.year ?? ""}
         </span>
       </p>
 
-      <p className="flex items-center gap-1.5 truncate text-[11px] text-slate-400">
-        <User className="size-3.5 shrink-0 text-slate-500" />
+      <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-slate-400">
+        <User className="size-3 shrink-0 text-slate-500" />
         <span className="truncate">{order.companies?.name ?? order.clients?.name ?? "—"}</span>
       </p>
 
       {/* Workflow Pending Badge */}
-      <div className={`mt-3 flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] font-medium ${pending.colorClass}`}>
-        <IconComponent className="size-3.5 shrink-0" />
+      <div className={`mt-2 flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-medium leading-none ${pending.colorClass}`}>
+        <IconComponent className="size-3 shrink-0" />
         <span className="truncate">{pending.label}</span>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-1.5 border-t border-slate-800/80 pt-2 text-[10px] text-slate-500">
+      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-1 border-t border-slate-800/80 pt-1.5 text-[9px] text-slate-500">
         <span>#{order.number} · {timeAgo(order.updated_at)}</span>
         {order.promised_at ? (
           <span className={`flex items-center gap-1 ${late ? "text-amber-500 font-bold" : ""}`}>
-            <Clock className="size-3" />
+            <Clock className="size-2.5" />
             {new Date(order.promised_at).toLocaleString("pt-BR", {
               dateStyle: "short",
               timeStyle: "short",

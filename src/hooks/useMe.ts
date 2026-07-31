@@ -17,8 +17,8 @@ export function useMe() {
     queryKey: ["me"],
     staleTime: 60_000,
     queryFn: async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      const user = userData.user;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const user = sessionData.session?.user;
       if (!user) return null;
 
       const [{ data: profile }, { data: roleRows }] = await Promise.all([
