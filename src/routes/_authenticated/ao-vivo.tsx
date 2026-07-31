@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Radio, Clock, Car, User, Wifi, AlertCircle, CheckCircle, ShieldAlert, Package, Play, UserCheck, Wrench, Camera } from "lucide-react";
+import { Radio, Clock, Car, User, Wifi, AlertCircle, CheckCircle, ShieldAlert, Package, Play, UserCheck, Wrench, Camera, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { OS_STATUS_LABELS } from "@/lib/roles";
@@ -100,6 +100,27 @@ function AoVivo() {
     return () => clearInterval(id);
   }, []);
 
+  if (orders.error) {
+    return (
+      <AppShell title="Acompanhamento Ao Vivo">
+        <div className="panel p-6 text-center text-sm text-red-500 flex flex-col items-center justify-center gap-3">
+          <AlertCircle className="size-8 text-red-500" />
+          <p>Não foi possível carregar o painel ao vivo: {orders.error.message}</p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (orders.isLoading) {
+    return (
+      <AppShell title="Acompanhamento Ao Vivo">
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="size-8 animate-spin text-primary" />
+        </div>
+      </AppShell>
+    );
+  }
+
   const list = orders.data ?? [];
   const naOficina = list.filter((o) => !["entregue", "concluido"].includes(o.status));
   const atrasadas = naOficina.filter((o) => o.promised_at && new Date(o.promised_at) < new Date());
@@ -185,10 +206,10 @@ function LiveCard({ order }: { order: LiveOrder }) {
         const secSigned = appList.some((a) => a.stage === "orcamento" && a.required_role === "secretaria" && a.decision === "aprovado");
         const cliSigned = appList.some((a) => a.stage === "orcamento" && a.required_role === "funcionario" && a.decision === "aprovado");
 
-        if (!mechSigned) return { label: "Falta Assinatura Mecânico", colorClass: "bg-red-500/10 text-red-450 border-red-500/20", icon: UserCheck };
-        if (!secSigned) return { label: "Falta Assinatura Secretaria", colorClass: "bg-red-500/10 text-red-450 border-red-500/20", icon: UserCheck };
-        if (!cliSigned) return { label: "Aguardando Aceite Cliente", colorClass: "bg-yellow-500/10 text-yellow-450 border-yellow-500/20", icon: User };
-        return { label: "Pronto p/ Avançar", colorClass: "bg-green-500/10 text-green-450 border-green-500/20", icon: CheckCircle };
+        if (!mechSigned) return { label: "Falta Assinatura Mecânico", colorClass: "bg-red-500/10 text-red-400 border-red-500/20", icon: UserCheck };
+        if (!secSigned) return { label: "Falta Assinatura Secretaria", colorClass: "bg-red-500/10 text-red-400 border-red-500/20", icon: UserCheck };
+        if (!cliSigned) return { label: "Aguardando Aceite Cliente", colorClass: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20", icon: User };
+        return { label: "Pronto p/ Avançar", colorClass: "bg-green-500/10 text-green-400 border-green-500/20", icon: CheckCircle };
 
       case "aprovado":
         return { label: "Autorizar Compra (Dono)", colorClass: "bg-purple-500/10 text-purple-400 border-purple-500/20", icon: ShieldAlert };
@@ -202,13 +223,13 @@ function LiveCard({ order }: { order: LiveOrder }) {
         return { label: "Peças Prontas", colorClass: "bg-green-500/10 text-green-400 border-green-500/20", icon: CheckCircle };
 
       case "em_execucao":
-        return { label: "Serviço em Andamento", colorClass: "bg-blue-500/10 text-blue-450 border-blue-500/20", icon: Play };
+        return { label: "Serviço em Andamento", colorClass: "bg-blue-500/10 text-blue-400 border-blue-500/20", icon: Play };
 
       case "concluido":
         return { label: "Pronto para Entrega", colorClass: "bg-green-500/10 text-green-400 border-green-500/20", icon: CheckCircle };
 
       case "entregue":
-        return { label: "Veículo Entregue", colorClass: "bg-slate-500/10 text-slate-400 border-slate-550/20", icon: CheckCircle };
+        return { label: "Veículo Entregue", colorClass: "bg-slate-500/10 text-slate-400 border-slate-500/20", icon: CheckCircle };
 
       default:
         return { label: "Indefinido", colorClass: "bg-slate-500/10 text-slate-400", icon: AlertCircle };
