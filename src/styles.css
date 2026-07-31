@@ -99,13 +99,13 @@
   --chart-3: oklch(0.72 0.15 65);
   --chart-4: oklch(0.6 0.12 235);
   --chart-5: oklch(0.56 0.2 25);
-  --sidebar: oklch(0.32 0.05 258);
+  --sidebar: #000000;
   --sidebar-foreground: oklch(0.97 0.005 250);
   --sidebar-primary: oklch(0.72 0.15 65);
   --sidebar-primary-foreground: oklch(0.2 0.04 65);
-  --sidebar-accent: oklch(0.39 0.055 258);
+  --sidebar-accent: #18181b;
   --sidebar-accent-foreground: oklch(0.98 0.004 250);
-  --sidebar-border: oklch(0.4 0.05 258);
+  --sidebar-border: #27272a;
   --sidebar-ring: oklch(0.6 0.12 235);
 }
 
@@ -125,6 +125,8 @@
     font-family: var(--font-sans);
     min-height: 100dvh;
     overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1,
@@ -153,24 +155,4 @@
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
 
-/* Lovable Infinity: ocultar selo do preview */
-#lovable-badge,
-#lovable-badge-v2,
-#lovable-badge-container,
-[id="lovable-badge"],
-[id^="lovable-badge"],
-a#lovable-badge,
-a[href*="lovable.dev"][target="_blank"],
-.lovable-badge,
-[data-lovable-badge],
-[data-testid="lovable-badge"] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  position: absolute !important;
-  width: 0 !important;
-  height: 0 !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-}
+
