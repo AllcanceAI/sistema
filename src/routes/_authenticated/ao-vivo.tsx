@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Radio, Clock, Car, User, Wifi, AlertCircle, CheckCircle, ShieldAlert, Package, Play, UserCheck } from "lucide-react";
+import { Radio, Clock, Car, User, Wifi, AlertCircle, CheckCircle, ShieldAlert, Package, Play, UserCheck, Wrench, Camera } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { OS_STATUS_LABELS } from "@/lib/roles";
