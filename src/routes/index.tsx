@@ -42,11 +42,25 @@ function LoginPage() {
   const fullName = "Dono";
   const [loading, setLoading] = useState(false);
 
+  const [isBootstrapped, setIsBootstrapped] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("bootstrapped") === "true";
+    }
+    return false;
+  });
+
   const bootstrap = useQuery({
     queryKey: ["needs-bootstrap"],
-    queryFn: () => checkBootstrap(),
-    staleTime: 0,
-    refetchOnMount: "always",
+    queryFn: async () => {
+      const res = await checkBootstrap();
+      if (res && res.needsBootstrap === false && typeof window !== "undefined") {
+        localStorage.setItem("bootstrapped", "true");
+        setIsBootstrapped(true);
+      }
+      return res;
+    },
+    enabled: !isBootstrapped,
+    staleTime: Infinity,
   });
 
   useEffect(() => {
@@ -55,7 +69,7 @@ function LoginPage() {
     });
   }, [navigate]);
 
-  const firstAccess = bootstrap.data?.needsBootstrap === true;
+  const firstAccess = !isBootstrapped && bootstrap.data?.needsBootstrap === true;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
