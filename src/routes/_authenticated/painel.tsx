@@ -90,11 +90,18 @@ function Painel() {
         title={`Olá, ${me?.fullName?.split(" ")[0] || "Recepcionista"}`}
         subtitle="Painel de Controle e Recepção"
         action={
-          <Button asChild size="sm">
-            <Link to="/os/nova">
-              <Plus className="size-4" /> Registrar Entrada / OS
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link to="/agendamentos">
+                <Calendar className="size-4" /> Agendar
+              </Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link to="/os/nova">
+                <Plus className="size-4" /> Nova OS
+              </Link>
+            </Button>
+          </div>
         }
       >
         {/* KPI Row */}

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera } from "lucide-react";
+import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Send, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -70,6 +70,9 @@ function OsDetalhe() {
   const { id } = Route.useParams();
   const { data: me } = useMe();
   const queryClient = useQueryClient();
+  const [editRequestModal, setEditRequestModal] = useState<{ stage: string; label: string } | null>(null);
+  const [editReason, setEditReason] = useState("");
+  const [editRequestSent, setEditRequestSent] = useState(false);
 
   const order = useQuery({
     queryKey: ["order", id],
@@ -139,6 +142,26 @@ function OsDetalhe() {
       invalidate();
     },
     onError: (error: Error) => toast.error(error.message),
+  });
+
+  const sendEditRequest = useMutation({
+    mutationFn: async ({ stage, reason }: { stage: string; reason: string }) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const { error } = await supabase.from("edit_requests").insert({
+        service_order_id: id,
+        stage,
+        reason,
+        requested_by: userData.user?.id ?? null,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Solicitação enviada! O gerente será notificado.");
+      setEditRequestSent(true);
+      setEditRequestModal(null);
+      setEditReason("");
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   if (order.isLoading) {
@@ -372,7 +395,7 @@ function OsDetalhe() {
       </section>
 
       {/* Details tabs */}
-      <Tabs defaultValue="entrada" className="mt-4">
+      <Tabs defaultValue={activeStepIndex <= 1 ? "entrada" : activeStepIndex === 2 || activeStepIndex === 3 ? "orcamento" : activeStepIndex >= 6 ? "execucao" : "entrada"} className="mt-4">
         <TabsList className="grid w-full grid-cols-3 md:w-auto md:grid-cols-6">
           <TabsTrigger value="entrada">Entrada</TabsTrigger>
           <TabsTrigger value="diagnostico">Laudo</TabsTrigger>
@@ -383,10 +406,44 @@ function OsDetalhe() {
         </TabsList>
 
         <TabsContent value="entrada" className="mt-3">
-          <ChecklistSection serviceOrderId={id} kind="entrada" canEdit={editable} />
+          {/* Lock banner for completed entry stage */}
+          {activeStepIndex > 0 && (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-950/20">
+              <div className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300">
+                <Lock className="size-4 shrink-0" />
+                Etapa de entrada concluída. Para fazer alterações, solicite autorização do gerente.
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 border-amber-300 text-amber-700"
+                onClick={() => setEditRequestModal({ stage: "entrada", label: "Entrada do Veículo" })}
+              >
+                <Send className="size-3.5" /> Solicitar edição
+              </Button>
+            </div>
+          )}
+          <ChecklistSection serviceOrderId={id} kind="entrada" canEdit={editable && activeStepIndex === 0} />
         </TabsContent>
 
         <TabsContent value="diagnostico" className="mt-3 space-y-3">
+          {/* Lock banner for completed diagnosis */}
+          {activeStepIndex > 1 && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-950/20">
+              <div className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300">
+                <Lock className="size-4 shrink-0" />
+                Diagnóstico concluído e enviado para aprovação. Para alterações, solicite ao gerente.
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 border-amber-300 text-amber-700"
+                onClick={() => setEditRequestModal({ stage: "diagnostico", label: "Diagnóstico" })}
+              >
+                <Send className="size-3.5" /> Solicitar edição
+              </Button>
+            </div>
+          )}
           <div className="panel space-y-3 p-4">
             <h2 className="font-display text-lg">Análise do problema e solução</h2>
             <div className="space-y-2">
@@ -395,7 +452,7 @@ function OsDetalhe() {
                 id="diagnosis"
                 rows={4}
                 defaultValue={os.diagnosis ?? ""}
-                disabled={!can(me, "lancar_diagnostico") && os.mechanic_id !== me?.userId}
+                disabled={activeStepIndex > 1 || (!can(me, "lancar_diagnostico") && os.mechanic_id !== me?.userId)}
                 onBlur={(e) =>
                   e.target.value !== (os.diagnosis ?? "") &&
                   updateOrder.mutate({ diagnosis: e.target.value })
@@ -408,7 +465,7 @@ function OsDetalhe() {
                 id="solution"
                 rows={4}
                 defaultValue={os.solution ?? ""}
-                disabled={!can(me, "lancar_diagnostico") && os.mechanic_id !== me?.userId}
+                disabled={activeStepIndex > 1 || (!can(me, "lancar_diagnostico") && os.mechanic_id !== me?.userId)}
                 onBlur={(e) =>
                   e.target.value !== (os.solution ?? "") &&
                   updateOrder.mutate({ solution: e.target.value })
@@ -416,7 +473,7 @@ function OsDetalhe() {
               />
             </div>
           </div>
-          <ChecklistSection serviceOrderId={id} kind="diagnostico" canEdit={editable} />
+          <ChecklistSection serviceOrderId={id} kind="diagnostico" canEdit={editable && activeStepIndex === 1} />
           <MediaSection
             serviceOrderId={id}
             stage="defeito"
@@ -454,6 +511,37 @@ function OsDetalhe() {
           <ApprovalsPanel serviceOrderId={id} onChange={invalidate} />
         </TabsContent>
       </Tabs>
+
+      {/* Edit Request Modal */}
+      {editRequestModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setEditRequestModal(null)}>
+          <div className="w-full max-w-md rounded-xl bg-background p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-xl font-bold mb-1">Solicitar Edição</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Etapa: <strong>{editRequestModal.label}</strong> — OS #{os.number}
+            </p>
+            <p className="text-sm mb-3">Descreva o motivo da alteração necessária. O gerente será notificado e poderá aprovar a edição.</p>
+            <Textarea
+              rows={3}
+              placeholder="Ex: Diagnóstico incompleto, faltou descrever o problema do ar condicionado..."
+              value={editReason}
+              onChange={(e) => setEditReason(e.target.value)}
+              className="mb-3"
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setEditRequestModal(null)}>Cancelar</Button>
+              <Button
+                className="flex-1"
+                disabled={!editReason.trim() || sendEditRequest.isPending}
+                onClick={() => sendEditRequest.mutate({ stage: editRequestModal.stage, reason: editReason })}
+              >
+                {sendEditRequest.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                Enviar Solicitação
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
