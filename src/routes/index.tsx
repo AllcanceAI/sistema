@@ -136,7 +136,7 @@ function LoginPage() {
             type="submit"
             className="w-full"
             size="lg"
-            disabled={loading || bootstrap.isPending}
+            disabled={loading}
           >
             {loading ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />}
             {firstAccess ? "Criar acesso e entrar" : "Entrar"}
