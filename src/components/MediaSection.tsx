@@ -83,7 +83,7 @@ export function MediaSection({
     onSuccess: () => {
       setDescription("");
       toast.success("Mídia enviada.");
-      queryClient.invalidateQueries({ queryKey: ["media", serviceOrderId, stage] });
+      queryClient.invalidateQueries({ queryKey: ["media", serviceOrderId] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -95,7 +95,7 @@ export function MediaSection({
       if (error) throw new Error(error.message);
     },
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["media", serviceOrderId, stage] }),
+      queryClient.invalidateQueries({ queryKey: ["media", serviceOrderId] }),
     onError: (error: Error) => toast.error(error.message),
   });
 
