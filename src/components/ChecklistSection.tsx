@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ListChecks, Camera, X, Image } from "lucide-react";
-import { useRef, useState } from "react";
+import { Loader2, ListChecks, Camera, X, Image, Trash2 } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CHECKLIST_ENTRADA, CHECKLIST_DIAGNOSTICO, CHECK_STATE_LABELS } from "@/lib/checklist-templates";
@@ -14,6 +14,7 @@ type ItemPhoto = {
   itemId: string;
   url: string;
   path: string;
+  mediaId: string;
 };
 
 export function ChecklistSection({
@@ -45,6 +46,46 @@ export function ChecklistSection({
       return data;
     },
   });
+
+  // Fetch photos linked to this checklist
+  const photosQuery = useQuery({
+    queryKey: ["checklist-photos", serviceOrderId, kind, checklist.data?.id],
+    enabled: !!checklist.data?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("media")
+        .select("id, storage_path, description, checklist_id")
+        .eq("service_order_id", serviceOrderId)
+        .eq("checklist_id", checklist.data!.id);
+      if (error) throw new Error(error.message);
+
+      const items = await Promise.all(
+        (data ?? []).map(async (row) => {
+          const { data: urlData } = await supabase.storage
+            .from("oficina-media")
+            .createSignedUrl(row.storage_path, 3600);
+          
+          // Extrapolate item ID from storage path (was stored as: {serviceOrderId}/checklist/{itemId}/{timestamp}.ext)
+          const parts = row.storage_path.split("/");
+          const itemId = parts[2] || ""; // third index contains the itemId
+
+          return {
+            itemId,
+            url: urlData?.signedUrl ?? "",
+            path: row.storage_path,
+            mediaId: row.id,
+          };
+        })
+      );
+      return items;
+    },
+  });
+
+  useEffect(() => {
+    if (photosQuery.data) {
+      setItemPhotos(photosQuery.data);
+    }
+  }, [photosQuery.data]);
 
   const create = useMutation({
     mutationFn: async () => {
@@ -105,19 +146,31 @@ export function ChecklistSection({
         .upload(path, file, { upsert: false });
       if (uploadError) throw new Error(uploadError.message);
 
-      const { data: urlData } = supabase.storage.from("oficina-media").getPublicUrl(path);
-      setItemPhotos((prev) => [...prev, { itemId, url: urlData.publicUrl, path }]);
+      const { data: urlData } = await supabase.storage
+        .from("oficina-media")
+        .createSignedUrl(path, 3600);
 
-      // Also save reference in media table
-      await supabase.from("media").insert({
-        service_order_id: serviceOrderId,
-        checklist_id: checklist.data?.id ?? null,
-        stage: kind === "entrada" ? "entrada" : "checklist",
-        storage_path: path,
-        mime_type: file.type,
-        description: `Foto do item: ${items.find(i => i.id === itemId)?.label ?? itemId}`,
-        created_by: userData.user?.id ?? null,
-      });
+      // Save reference in media table
+      const { data: mediaData, error: dbError } = await supabase
+        .from("media")
+        .insert({
+          service_order_id: serviceOrderId,
+          checklist_id: checklist.data?.id ?? null,
+          stage: kind === "entrada" ? "entrada" : "checklist",
+          storage_path: path,
+          mime_type: file.type,
+          description: `Foto do item: ${items.find(i => i.id === itemId)?.label ?? itemId}`,
+          created_by: userData.user?.id ?? null,
+        })
+        .select("id")
+        .single();
+      
+      if (dbError) throw new Error(dbError.message);
+
+      setItemPhotos((prev) => [
+        ...prev, 
+        { itemId, url: urlData?.signedUrl ?? "", path, mediaId: mediaData.id }
+      ]);
 
       toast.success("Foto adicionada!");
     } catch (e: any) {
@@ -127,9 +180,18 @@ export function ChecklistSection({
     }
   }
 
-  function removeLocalPhoto(path: string) {
-    setItemPhotos((prev) => prev.filter((p) => p.path !== path));
-  }
+  const deletePhoto = useMutation({
+    mutationFn: async (photo: ItemPhoto) => {
+      await supabase.storage.from("oficina-media").remove([photo.path]);
+      const { error } = await supabase.from("media").delete().eq("id", photo.mediaId);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: (_, photo) => {
+      setItemPhotos((prev) => prev.filter((p) => p.path !== photo.path));
+      toast.success("Foto removida!");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   if (checklist.isLoading) {
     return <Loader2 className="mx-auto my-6 size-5 animate-spin text-muted-foreground" />;
@@ -182,20 +244,8 @@ export function ChecklistSection({
               </div>
 
               {/* Photo upload per item */}
-              {canEdit ? (
-                <div className="mt-2">
-                  <input
-                    ref={activeItemId === item.id ? fileInputRef : undefined}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handlePhotoUpload(item.id, file);
-                      e.target.value = "";
-                    }}
-                  />
+              <div className="mt-2">
+                {canEdit && (
                   <Button
                     type="button"
                     variant="outline"
@@ -204,14 +254,15 @@ export function ChecklistSection({
                     disabled={uploadingItemId === item.id}
                     onClick={() => {
                       setActiveItemId(item.id);
-                      // Create a dedicated input for this item
                       const input = document.createElement("input");
                       input.type = "file";
                       input.accept = "image/*";
-                      input.capture = "environment";
+                      input.multiple = true;
                       input.onchange = (e) => {
-                        const file = (e.target as HTMLInputElement).files?.[0];
-                        if (file) handlePhotoUpload(item.id, file);
+                        const files = (e.target as HTMLInputElement).files;
+                        if (files) {
+                          Array.from(files).forEach((file) => handlePhotoUpload(item.id, file));
+                        }
                       };
                       input.click();
                     }}
@@ -221,38 +272,36 @@ export function ChecklistSection({
                     ) : (
                       <Camera className="size-3.5" />
                     )}
-                    {uploadingItemId === item.id ? "Enviando..." : "Foto deste item"}
+                    {uploadingItemId === item.id ? "Enviando..." : "Adicionar Fotos"}
                   </Button>
+                )}
 
-                  {/* Show uploaded photos for this item */}
-                  {photos.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {photos.map((p) => (
-                        <div key={p.path} className="relative">
-                          <img
-                            src={p.url}
-                            alt="Foto do item"
-                            className="size-16 rounded-md object-cover border"
-                          />
+                {/* Show uploaded photos for this item */}
+                {photos.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {photos.map((p) => (
+                      <div key={p.path} className="relative group border rounded-md overflow-hidden">
+                        <img
+                          src={p.url}
+                          alt="Foto do item"
+                          className="size-16 object-cover cursor-pointer hover:opacity-90"
+                          onClick={() => window.open(p.url, "_blank")}
+                        />
+                        {canEdit && (
                           <button
                             type="button"
-                            className="absolute -right-1.5 -top-1.5 rounded-full bg-destructive p-0.5 text-white"
-                            onClick={() => removeLocalPhoto(p.path)}
+                            className="absolute right-0.5 top-0.5 rounded bg-red-600 p-1 text-white hover:bg-red-700 opacity-90 transition-opacity"
+                            onClick={() => deletePhoto.mutate(p)}
+                            title="Excluir"
                           >
-                            <X className="size-3" />
+                            <Trash2 className="size-3" />
                           </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : photos.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {photos.map((p) => (
-                    <img key={p.path} src={p.url} alt="Foto" className="size-16 rounded-md object-cover border" />
-                  ))}
-                </div>
-              ) : null}
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {canEdit ? (
                 <Textarea

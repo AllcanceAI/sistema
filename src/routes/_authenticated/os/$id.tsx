@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { ChecklistSection } from "@/components/ChecklistSection";
 import { MediaSection } from "@/components/MediaSection";
 import { PaymentsPanel } from "@/components/PaymentsPanel";
+import { EvidenciaPanel } from "@/components/EvidenciaPanel";
 import { useMe, can, hasRole } from "@/hooks/useMe";
 import {
   APPROVAL_STAGE_LABELS,
@@ -396,13 +397,14 @@ function OsDetalhe() {
 
       {/* Details tabs */}
       <Tabs defaultValue={activeStepIndex <= 1 ? "entrada" : activeStepIndex === 2 || activeStepIndex === 3 ? "orcamento" : activeStepIndex >= 6 ? "execucao" : "entrada"} className="mt-4">
-        <TabsList className="grid w-full grid-cols-3 md:w-auto md:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-3 md:w-auto md:grid-cols-7">
           <TabsTrigger value="entrada">Entrada</TabsTrigger>
           <TabsTrigger value="diagnostico">Laudo</TabsTrigger>
           <TabsTrigger value="execucao">Execução</TabsTrigger>
           <TabsTrigger value="orcamento">Orçamento</TabsTrigger>
           <TabsTrigger value="pagamentos">Pagamentos</TabsTrigger>
           <TabsTrigger value="aprovacoes">Aprovações</TabsTrigger>
+          <TabsTrigger value="evidencias">Evidências</TabsTrigger>
         </TabsList>
 
         <TabsContent value="entrada" className="mt-3">
@@ -509,6 +511,10 @@ function OsDetalhe() {
 
         <TabsContent value="aprovacoes" className="mt-3">
           <ApprovalsPanel serviceOrderId={id} onChange={invalidate} />
+        </TabsContent>
+
+        <TabsContent value="evidencias" className="mt-3">
+          <EvidenciaPanel serviceOrderId={id} />
         </TabsContent>
       </Tabs>
 
