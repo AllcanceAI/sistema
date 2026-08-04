@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   CalendarDays, ChevronLeft, ChevronRight, Plus, Car, User, Clock,
-  Loader2, X, MessageCircle, Check
+  Loader2, X, MessageCircle, Check, CalendarRange, CheckCircle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -30,7 +30,7 @@ type Appointment = {
   service: string | null;
   scheduled_at: string;
   notes: string | null;
-  status: string;
+  status: string; // 'agendado' | 'confirmado' | 'compareceu' | 'remarcar' | 'cancelado'
   created_at: string;
 };
 
@@ -40,6 +40,14 @@ const MONTH_NAMES = [
 ];
 
 const DOW = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+const STATUS_BADGES: Record<string, { label: string; style: string }> = {
+  agendado: { label: "Agendado", style: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
+  confirmado: { label: "Cliente Confirmou", style: "bg-green-500/10 text-green-500 border-green-500/20" },
+  compareceu: { label: "Compareceu", style: "bg-teal-500/10 text-teal-500 border-teal-500/20" },
+  remarcar: { label: "Remarcar", style: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
+  cancelado: { label: "Cancelado", style: "bg-rose-500/10 text-rose-500 border-rose-500/20" },
+};
 
 function Agendamentos() {
   const queryClient = useQueryClient();
@@ -96,16 +104,20 @@ function Agendamentos() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const cancelAppointment = useMutation({
-    mutationFn: async (id: string) => {
+  const updateAppointmentStatus = useMutation({
+    mutationFn: async ({ id, status, scheduled_at }: { id: string; status: string; scheduled_at?: string }) => {
+      const patch: Record<string, any> = { status };
+      if (scheduled_at) {
+        patch.scheduled_at = scheduled_at;
+      }
       const { error } = await supabase
         .from("appointments")
-        .update({ status: "cancelado" })
+        .update(patch)
         .eq("id", id);
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      toast.success("Agendamento cancelado.");
+      toast.success("Agendamento atualizado!");
       queryClient.invalidateQueries({ queryKey: ["appointments"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -212,15 +224,21 @@ function Agendamentos() {
                   {day}
                 </div>
                 <div className="space-y-0.5">
-                  {dayAppts.slice(0, 3).map((a) => (
-                    <div
-                      key={a.id}
-                      className="truncate rounded bg-primary/15 px-1 py-0.5 text-[10px] font-medium text-primary"
-                      onClick={(e) => { e.stopPropagation(); setSelectedDay(day); }}
-                    >
-                      🚗 {a.plate ?? a.client_name}
-                    </div>
-                  ))}
+                  {dayAppts.slice(0, 3).map((a) => {
+                    let borderStyle = "border-l-primary bg-primary/15 text-primary";
+                    if (a.status === "confirmado") borderStyle = "border-l-green-500 bg-green-500/10 text-green-600";
+                    if (a.status === "compareceu") borderStyle = "border-l-teal-500 bg-teal-500/10 text-teal-600";
+                    if (a.status === "remarcar") borderStyle = "border-l-amber-500 bg-amber-500/10 text-amber-600";
+                    return (
+                      <div
+                        key={a.id}
+                        className={`truncate rounded border-l-2 px-1 py-0.5 text-[10px] font-medium ${borderStyle}`}
+                        onClick={(e) => { e.stopPropagation(); setSelectedDay(day); }}
+                      >
+                        🚗 {a.plate ?? a.client_name}
+                      </div>
+                    );
+                  })}
                   {dayAppts.length > 3 && (
                     <div className="text-[9px] text-muted-foreground px-1">+{dayAppts.length - 3} mais</div>
                   )}
@@ -247,11 +265,18 @@ function Agendamentos() {
           ) : (
             <div className="space-y-3">
               {getAppts(selectedDay).map((a) => (
-                <div key={a.id} className="rounded-lg border p-3 flex items-start justify-between gap-3">
+                <div key={a.id} className="rounded-lg border p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-secondary/10">
                   <div className="min-w-0">
-                    <p className="font-semibold text-sm flex items-center gap-1.5">
-                      <User className="size-3.5 shrink-0" /> {a.client_name}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-sm flex items-center gap-1.5">
+                        <User className="size-3.5 shrink-0" /> {a.client_name}
+                      </p>
+                      {a.status && STATUS_BADGES[a.status] && (
+                        <span className={`rounded border px-1.5 py-0.2 text-[9px] font-bold uppercase leading-none ${STATUS_BADGES[a.status].style}`}>
+                          {STATUS_BADGES[a.status].label}
+                        </span>
+                      )}
+                    </div>
                     {a.plate && (
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                         <Car className="size-3" /> {a.plate}
@@ -266,11 +291,44 @@ function Agendamentos() {
                     </p>
                     {a.notes && <p className="text-xs text-muted-foreground mt-0.5 italic">{a.notes}</p>}
                   </div>
-                  <div className="flex shrink-0 flex-col gap-1">
+
+                  <div className="flex flex-wrap gap-1.5 mt-2 md:mt-0">
                     <Button size="sm" variant="outline" className="gap-1 text-green-600 border-green-300" onClick={() => whatsapp(a)}>
                       <MessageCircle className="size-3.5" /> WhatsApp
                     </Button>
-                    <Button size="sm" variant="ghost" className="gap-1 text-destructive" onClick={() => cancelAppointment.mutate(a.id)}>
+
+                    {/* Status selection actions */}
+                    {a.status !== "confirmado" && (
+                      <Button size="sm" variant="outline" className="gap-1 text-green-700 border-green-400 bg-green-500/5 hover:bg-green-500/10" onClick={() => updateAppointmentStatus.mutate({ id: a.id, status: "confirmado" })}>
+                        <Check className="size-3.5" /> Confirmou
+                      </Button>
+                    )}
+
+                    {a.status !== "compareceu" && (
+                      <Button size="sm" variant="outline" className="gap-1 text-teal-700 border-teal-400 bg-teal-500/5 hover:bg-teal-500/10" onClick={() => updateAppointmentStatus.mutate({ id: a.id, status: "compareceu" })}>
+                        <CheckCircle className="size-3.5" /> Veio
+                      </Button>
+                    )}
+
+                    {a.status !== "remarcar" && (
+                      <Button size="sm" variant="outline" className="gap-1 text-amber-700 border-amber-400 bg-amber-50/50 hover:bg-amber-50" onClick={() => {
+                        const newDate = prompt("Digite a nova data/hora (Ex: 10/08/2026 14:00):");
+                        if (newDate) {
+                          // Parse date simple helper format DD/MM/YYYY HH:MM
+                          const match = newDate.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+                          if (match) {
+                            const parsed = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]), Number(match[4]), Number(match[5]));
+                            updateAppointmentStatus.mutate({ id: a.id, status: "remarcar", scheduled_at: parsed.toISOString() });
+                          } else {
+                            toast.error("Formato inválido. Use DD/MM/AAAA HH:MM");
+                          }
+                        }
+                      }}>
+                        <CalendarRange className="size-3.5" /> Remarcar
+                      </Button>
+                    )}
+
+                    <Button size="sm" variant="ghost" className="gap-1 text-destructive" onClick={() => updateAppointmentStatus.mutate({ id: a.id, status: "cancelado" })}>
                       <X className="size-3.5" /> Cancelar
                     </Button>
                   </div>
@@ -296,22 +354,42 @@ function Agendamentos() {
         ) : (
           <div className="space-y-2">
             {activeAppts.map((a) => (
-              <div key={a.id} className="panel flex items-center gap-3 p-3">
+              <div key={a.id} className="panel flex flex-col md:flex-row md:items-center justify-between gap-3 p-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold">
-                    {new Date(a.scheduled_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-                    {" — "}
-                    <span className="text-primary">{a.plate ?? "Sem placa"}</span>
-                    {" · "}
-                    {a.client_name}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold">
+                      {new Date(a.scheduled_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                      {" — "}
+                      <span className="text-primary">{a.plate ?? "Sem placa"}</span>
+                      {" · "}
+                      {a.client_name}
+                    </p>
+                    {a.status && STATUS_BADGES[a.status] && (
+                      <span className={`rounded border px-1.5 py-0.2 text-[9px] font-bold uppercase leading-none ${STATUS_BADGES[a.status].style}`}>
+                        {STATUS_BADGES[a.status].label}
+                      </span>
+                    )}
+                  </div>
                   {a.service && <p className="text-xs text-muted-foreground">{a.service}</p>}
                 </div>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1 mt-2 md:mt-0">
                   <Button size="sm" variant="outline" className="text-green-600" onClick={() => whatsapp(a)}>
                     <MessageCircle className="size-3.5" />
                   </Button>
-                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => cancelAppointment.mutate(a.id)}>
+                  
+                  {a.status !== "confirmado" && (
+                    <Button size="sm" variant="outline" className="text-green-700 hover:bg-green-50" onClick={() => updateAppointmentStatus.mutate({ id: a.id, status: "confirmado" })} title="Confirmou">
+                      <Check className="size-3.5" />
+                    </Button>
+                  )}
+
+                  {a.status !== "compareceu" && (
+                    <Button size="sm" variant="outline" className="text-teal-700 hover:bg-teal-50" onClick={() => updateAppointmentStatus.mutate({ id: a.id, status: "compareceu" })} title="Veio">
+                      <CheckCircle className="size-3.5" />
+                    </Button>
+                  )}
+
+                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => updateAppointmentStatus.mutate({ id: a.id, status: "cancelado" })}>
                     <X className="size-3.5" />
                   </Button>
                 </div>
