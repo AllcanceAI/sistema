@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/cadastros")({
   head: () => ({
@@ -39,6 +40,9 @@ function Cadastros() {
 
   const [editingCompany, setEditingCompany] = useState<any>(null);
   const [newClient, setNewClient] = useState({ name: "", phone: "", email: "" });
+  
+  const [editingVehicle, setEditingVehicle] = useState<any>(null);
+  const [newVehicle, setNewVehicle] = useState({ plate: "", brand: "", model: "", year: "", color: "", client_id: "none", company_id: "none" });
 
   const companies = useQuery({
     queryKey: ["companies", "all"],
@@ -170,6 +174,52 @@ function Cadastros() {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
     },
     onError: (error: Error) => toast.error("Não é possível excluir cliente que possui Ordens de Serviço."),
+  });
+
+  const createVehicle = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        plate: newVehicle.plate.trim().toUpperCase(),
+        brand: newVehicle.brand.trim() || null,
+        model: newVehicle.model.trim() || null,
+        year: newVehicle.year ? Number(newVehicle.year) : null,
+        color: newVehicle.color.trim() || null,
+        client_id: newVehicle.client_id !== "none" ? newVehicle.client_id : null,
+        company_id: newVehicle.company_id !== "none" ? newVehicle.company_id : null,
+      };
+      if (!payload.plate) throw new Error("Placa é obrigatória");
+      const { error } = await supabase.from("vehicles").insert(payload);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      setNewVehicle({ plate: "", brand: "", model: "", year: "", color: "", client_id: "none", company_id: "none" });
+      toast.success("Veículo cadastrado.");
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const updateVehicle = useMutation({
+    mutationFn: async (veh: any) => {
+      const payload = {
+        plate: veh.plate.trim().toUpperCase(),
+        brand: veh.brand?.trim() || null,
+        model: veh.model?.trim() || null,
+        year: veh.year ? Number(veh.year) : null,
+        color: veh.color?.trim() || null,
+        client_id: veh.client_id !== "none" ? veh.client_id : null,
+        company_id: veh.company_id !== "none" ? veh.company_id : null,
+      };
+      if (!payload.plate) throw new Error("Placa é obrigatória");
+      const { error } = await supabase.from("vehicles").update(payload).eq("id", veh.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      setEditingVehicle(null);
+      toast.success("Veículo atualizado.");
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const deleteVehicle = useMutation({
@@ -417,33 +467,148 @@ function Cadastros() {
         </TabsContent>
 
         <TabsContent value="veiculos" className="mt-3 space-y-2">
+          {editable ? (
+            <form
+              className="panel space-y-3 p-4 mb-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                createVehicle.mutate();
+              }}
+            >
+              <h2 className="flex items-center gap-2 font-display text-lg">
+                <Car className="size-4 text-primary" /> Novo veículo
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                <div className="space-y-2">
+                  <Label htmlFor="vplate">Placa</Label>
+                  <Input id="vplate" required value={newVehicle.plate} onChange={(e) => setNewVehicle({ ...newVehicle, plate: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vbrand">Marca</Label>
+                  <Input id="vbrand" value={newVehicle.brand} onChange={(e) => setNewVehicle({ ...newVehicle, brand: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vmodel">Modelo</Label>
+                  <Input id="vmodel" value={newVehicle.model} onChange={(e) => setNewVehicle({ ...newVehicle, model: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vcolor">Cor</Label>
+                  <Input id="vcolor" value={newVehicle.color} onChange={(e) => setNewVehicle({ ...newVehicle, color: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Vincular a Empresa/Locadora</Label>
+                  <Select value={newVehicle.company_id} onValueChange={(val) => setNewVehicle({ ...newVehicle, company_id: val })}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {(companies.data ?? []).map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Vincular a Cliente Particular</Label>
+                  <Select value={newVehicle.client_id} onValueChange={(val) => setNewVehicle({ ...newVehicle, client_id: val })}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {(clients.data ?? []).map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={createVehicle.isPending}>
+                Cadastrar veículo
+              </Button>
+            </form>
+          ) : null}
+
           {(vehicles.data ?? []).map((v) => (
             <div key={v.id} className="panel p-3 text-sm flex items-start justify-between gap-4">
-              <div>
-                <p className="flex items-center gap-2 font-display text-xl leading-none">
-                  <Car className="size-4 text-primary" /> {v.plate}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {[v.brand, v.model, v.year, v.color, v.companies?.name ?? v.clients?.name]
-                    .filter(Boolean)
-                    .join(" · ") || "—"}
-                </p>
-              </div>
-              {editable && (
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 hover:bg-red-50 hover:text-red-600"
-                    onClick={() => {
-                      if (confirm(`Tem certeza que deseja excluir o veículo ${v.plate}?`)) {
-                        deleteVehicle.mutate(v.id);
-                      }
-                    }}
-                  >
-                    <Trash2 className="size-4 text-muted-foreground hover:text-red-600" />
-                  </Button>
+              {editingVehicle?.id === v.id ? (
+                <div className="w-full space-y-3">
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    <Input placeholder="Placa" required value={editingVehicle.plate} onChange={(e) => setEditingVehicle({ ...editingVehicle, plate: e.target.value })} />
+                    <Input placeholder="Marca" value={editingVehicle.brand || ""} onChange={(e) => setEditingVehicle({ ...editingVehicle, brand: e.target.value })} />
+                    <Input placeholder="Modelo" value={editingVehicle.model || ""} onChange={(e) => setEditingVehicle({ ...editingVehicle, model: e.target.value })} />
+                    <Input placeholder="Cor" value={editingVehicle.color || ""} onChange={(e) => setEditingVehicle({ ...editingVehicle, color: e.target.value })} />
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Select value={editingVehicle.company_id || "none"} onValueChange={(val) => setEditingVehicle({ ...editingVehicle, company_id: val })}>
+                      <SelectTrigger><SelectValue placeholder="Empresa vinculada..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhuma empresa</SelectItem>
+                        {(companies.data ?? []).map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={editingVehicle.client_id || "none"} onValueChange={(val) => setEditingVehicle({ ...editingVehicle, client_id: val })}>
+                      <SelectTrigger><SelectValue placeholder="Cliente vinculado..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhum cliente</SelectItem>
+                        {(clients.data ?? []).map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setEditingVehicle(null)}>Cancelar</Button>
+                    <Button size="sm" onClick={() => updateVehicle.mutate(editingVehicle)} disabled={updateVehicle.isPending}>Salvar</Button>
+                  </div>
                 </div>
+              ) : (
+                <>
+                  <div>
+                    <p className="flex items-center gap-2 font-display text-xl leading-none">
+                      <Car className="size-4 text-primary" /> {v.plate}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {[v.brand, v.model, v.year, v.color, v.companies?.name ?? v.clients?.name]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </p>
+                  </div>
+                  {editable && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => setEditingVehicle({
+                          id: v.id,
+                          plate: v.plate,
+                          brand: v.brand,
+                          model: v.model,
+                          color: v.color,
+                          year: v.year,
+                          client_id: v.client_id,
+                          company_id: v.company_id,
+                        })}
+                      >
+                        <Pen className="size-4 text-muted-foreground" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 hover:bg-red-50 hover:text-red-600"
+                        onClick={() => {
+                          if (confirm(`Tem certeza que deseja excluir o veículo ${v.plate}?`)) {
+                            deleteVehicle.mutate(v.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="size-4 text-muted-foreground hover:text-red-600" />
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ))}
