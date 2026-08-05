@@ -5,7 +5,7 @@ import { Building2, Car, Users, Pen, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
-import { useMe, can } from "@/hooks/useMe";
+import { useMe, can, hasRole } from "@/hooks/useMe";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +27,7 @@ export const Route = createFileRoute("/_authenticated/cadastros")({
 function Cadastros() {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
-  const editable = can(me, "cadastrar_os");
+  const editable = can(me, "cadastrar_os") || hasRole(me, "secretaria", "gerente");
   const [company, setCompany] = useState({ name: "", cnpj: "", contact: "", phone: "", email: "" });
 
   const [editingClient, setEditingClient] = useState<{
