@@ -76,15 +76,6 @@ function OsDetalhe() {
   const [editRequestSent, setEditRequestSent] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("entrada");
 
-  // Keep tab in sync with workflow progression
-  useEffect(() => {
-    if (activeStepIndex === 0) setActiveTab("entrada");
-    else if (activeStepIndex === 1) setActiveTab("diagnostico");
-    else if (activeStepIndex === 2 || activeStepIndex === 3) setActiveTab("orcamento");
-    else if (activeStepIndex === 4 || activeStepIndex === 5) setActiveTab("aprovacoes");
-    else if (activeStepIndex >= 6) setActiveTab("execucao");
-  }, [activeStepIndex]);
-
   const order = useQuery({
     queryKey: ["order", id],
     queryFn: async () => {
@@ -249,6 +240,15 @@ function OsDetalhe() {
   };
 
   const activeStepIndex = getActiveStep();
+
+  // Keep tab in sync with workflow progression
+  useEffect(() => {
+    if (activeStepIndex === 0) setActiveTab("entrada");
+    else if (activeStepIndex === 1) setActiveTab("diagnostico");
+    else if (activeStepIndex === 2 || activeStepIndex === 3) setActiveTab("orcamento");
+    else if (activeStepIndex === 4 || activeStepIndex === 5) setActiveTab("aprovacoes");
+    else if (activeStepIndex >= 6) setActiveTab("execucao");
+  }, [activeStepIndex]);
 
   return (
     <AppShell
