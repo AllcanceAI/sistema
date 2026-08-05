@@ -419,7 +419,7 @@ export function ChecklistSection({
             }}
           >
             <CheckCircle2 className="size-5" />
-            Concluir {kind === "entrada" ? "Laudo de Entrada" : "Diagnóstico"} e Avançar
+            {kind === "entrada" ? "Próximo" : "Concluir Diagnóstico e Finalizar"}
           </Button>
         </div>
       )}
