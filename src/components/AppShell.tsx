@@ -11,6 +11,7 @@ import {
   Radio,
   Wallet,
   CalendarDays,
+  Receipt,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -47,6 +48,7 @@ export function AppShell({
   }
   if (hasRole(me, "dono", "gerente", "contabilidade")) {
     items.push({ to: "/financeiro", label: "Caixa", icon: <Wallet className="size-5" /> });
+    items.push({ to: "/notas-fiscais", label: "Notas Fiscais", icon: <Receipt className="size-5" /> });
   }
   if (hasRole(me, "dono")) {
     items.push({ to: "/usuarios", label: "Equipe", icon: <Users className="size-5" /> });
