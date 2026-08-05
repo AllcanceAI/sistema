@@ -1194,6 +1194,7 @@ function QuotesPanel({
   };
 
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
+  const [editingPoId, setEditingPoId] = useState<string | null>(null);
   const [printState, setPrintState] = useState<{ id: string, action: "pdf" | "image" } | null>(null);
 
   useEffect(() => {
@@ -1362,6 +1363,24 @@ function QuotesPanel({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleEditPo = (p: any) => {
+    let meta: any = { term: "a_vista", items: [] };
+    try { meta = JSON.parse(p.description || "{}"); } catch(e) {}
+    if (!meta.items && meta.text) meta.items = [{ id: crypto.randomUUID(), description: meta.text, refCode: meta.refCode || "", quantity: 1, unit_price: Number(p.total), total: Number(p.total) }];
+    
+    setEditingPoId(p.id);
+    setPo({
+      supplier: p.supplier || "",
+      description: "",
+      total: p.total?.toString() || "",
+      refCode: "",
+      term: meta.term || "a_vista",
+      paymentStatus: p.status || "pendente"
+    });
+    setPoItems(meta.items || []);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const createPo = useMutation({
     mutationFn: async () => {
       const { data: userData } = await supabase.auth.getUser();
@@ -1370,30 +1389,41 @@ function QuotesPanel({
         term: po.term
       });
 
-      const { error } = await supabase.from("purchase_orders").insert({
-        service_order_id: serviceOrderId,
-        supplier: po.supplier.trim() || null,
-        description: descJson,
-        status: po.paymentStatus,
-        total: poTotal,
-        created_by: userData.user?.id ?? null,
-      });
-      if (error) throw new Error(error.message);
-
-      if (po.paymentStatus === "pago") {
-        await supabase.from("expenses").insert({
-          description: `Peça OS #${osData?.number} - Fornecedor: ${po.supplier}`,
-          category: "pecas",
-          amount: poTotal,
-          spent_at: new Date().toISOString(),
+      if (editingPoId) {
+        const { error } = await supabase.from("purchase_orders").update({
+          supplier: po.supplier.trim() || null,
+          description: descJson,
+          status: po.paymentStatus,
+          total: poTotal,
+        }).eq("id", editingPoId);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase.from("purchase_orders").insert({
+          service_order_id: serviceOrderId,
+          supplier: po.supplier.trim() || null,
+          description: descJson,
+          status: po.paymentStatus,
+          total: poTotal,
           created_by: userData.user?.id ?? null,
         });
+        if (error) throw new Error(error.message);
+
+        if (po.paymentStatus === "pago") {
+          await supabase.from("expenses").insert({
+            description: `Peça OS #${osData?.number} - Fornecedor: ${po.supplier}`,
+            category: "pecas",
+            amount: poTotal,
+            spent_at: new Date().toISOString(),
+            created_by: userData.user?.id ?? null,
+          });
+        }
       }
     },
     onSuccess: () => {
       setPo({ supplier: "", description: "", total: "", refCode: "", term: "a_vista", paymentStatus: "pendente" });
       setPoItems([]);
-      toast.success("Pedido de compra registrado.");
+      setEditingPoId(null);
+      toast.success(editingPoId ? "Pedido atualizado." : "Pedido registrado.");
       queryClient.invalidateQueries({ queryKey: ["purchase_orders", serviceOrderId] });
       queryClient.invalidateQueries({ queryKey: ["caixa"] });
       onChange();
@@ -1727,9 +1757,20 @@ function QuotesPanel({
           <p className="font-display text-lg text-primary">{brl(poTotal)}</p>
         </div>
 
-        <Button variant="secondary" className="w-full" onClick={() => createPo.mutate()} disabled={createPo.isPending || poItems.length === 0}>
-          Registrar pedido de compra
-        </Button>
+        <div className="flex gap-2">
+          {editingPoId && (
+            <Button variant="outline" className="w-full" onClick={() => {
+              setEditingPoId(null);
+              setPoItems([]);
+              setPo({ supplier: "", description: "", total: "", refCode: "", term: "a_vista", paymentStatus: "pendente" });
+            }}>
+              Cancelar Edição
+            </Button>
+          )}
+          <Button variant="secondary" className="w-full" onClick={() => createPo.mutate()} disabled={createPo.isPending || poItems.length === 0}>
+            {editingPoId ? "Salvar Alterações" : "Registrar pedido de compra"}
+          </Button>
+        </div>
       </div>
 
       {(purchases.data ?? []).map((p) => {
@@ -1767,11 +1808,16 @@ function QuotesPanel({
               </div>
             ) : null}
 
-            {p.status !== "pago" && (
-              <Button size="sm" variant="outline" className="w-full mt-3 gap-2" onClick={() => payPo.mutate(p)} disabled={payPo.isPending}>
-                <CheckCircle2 className="size-4" /> Marcar como Pago e Baixar Caixa
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <Button size="sm" variant="outline" className="w-full" onClick={() => handleEditPo(p)}>
+                Editar Pedido
               </Button>
-            )}
+              {p.status !== "pago" && (
+                <Button size="sm" variant="outline" className="w-full gap-2" onClick={() => payPo.mutate(p)} disabled={payPo.isPending}>
+                  <CheckCircle2 className="size-4" /> Pago / Baixar Caixa
+                </Button>
+              )}
+            </div>
           </div>
         );
       })}
