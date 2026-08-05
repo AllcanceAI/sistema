@@ -98,6 +98,11 @@ export function AppShell({
           >
             <LogOut className="size-4" /> Sair
           </Button>
+
+          <div className="mt-6 pt-4 border-t border-sidebar-border/50 text-[10px] text-center text-sidebar-foreground/50">
+            <p>Direitos garantidos</p>
+            <p>Desenvolvedor: <a href="https://gabrielalvesoficial.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-sidebar-foreground/80">Gabriel Alves</a></p>
+          </div>
         </div>
       </aside>
 
