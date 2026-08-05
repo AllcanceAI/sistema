@@ -1205,12 +1205,17 @@ function QuotesPanel({
           const el = document.getElementById("printable-quote");
           if (el) {
             try {
-              const dataUrl = await htmlToImage.toPng(el, { quality: 1, pixelRatio: 2 });
+              const dataUrl = await htmlToImage.toPng(el, { 
+                quality: 1, 
+                pixelRatio: 2,
+                backgroundColor: "#ffffff",
+              });
               const link = document.createElement("a");
               link.download = `orcamento-${osData?.number || "export"}.png`;
               link.href = dataUrl;
               link.click();
             } catch (e) {
+              console.error("htmlToImage error:", e);
               toast.error("Erro ao gerar imagem");
             }
           }

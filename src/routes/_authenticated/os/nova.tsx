@@ -68,7 +68,27 @@ function NovaOs() {
     complaint: searchParams.complaint || "",
     estimatedMinutes: "60",
     mechanicId: "",
+    cpf: "",
+    birthDate: "",
   });
+
+  const [cpfError, setCpfError] = useState("");
+
+  const validateCPF = (cpf: string) => {
+    cpf = cpf.replace(/[^\d]+/g, "");
+    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+    let sum = 0, rest;
+    for (let i = 1; i <= 9; i++) sum = sum + parseInt(cpf.substring(i - 1, i)) * (11 - i);
+    rest = (sum * 10) % 11;
+    if (rest === 10 || rest === 11) rest = 0;
+    if (rest !== parseInt(cpf.substring(9, 10))) return false;
+    sum = 0;
+    for (let i = 1; i <= 10; i++) sum = sum + parseInt(cpf.substring(i - 1, i)) * (12 - i);
+    rest = (sum * 10) % 11;
+    if (rest === 10 || rest === 11) rest = 0;
+    if (rest !== parseInt(cpf.substring(10, 11))) return false;
+    return true;
+  };
 
   const runLookup = useServerFn(lookupPlate);
   const lookup = useMutation({
@@ -139,6 +159,8 @@ function NovaOs() {
             name: form.clientName.trim(),
             phone: form.phone.trim() || null,
             email: form.email.trim() || null,
+            document: form.cpf.trim() || null,
+            notes: form.birthDate.trim() ? `Data de Nascimento: ${form.birthDate}` : null,
             kind: companyId ? "empresa" : "pessoa",
             company_id: companyId,
           })
@@ -224,6 +246,10 @@ function NovaOs() {
             toast.error("Informe a placa do veículo.");
             return;
           }
+          if (form.cpf && !validateCPF(form.cpf)) {
+            setCpfError("CPF inválido ou inexistente");
+            return;
+          }
           save.mutate();
         }}
       >
@@ -260,6 +286,21 @@ function NovaOs() {
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Telefone" value={form.phone} onChange={(v) => set("phone", v)} type="tel" />
             <Field label="E-mail" value={form.email} onChange={(v) => set("email", v)} type="email" />
+            <div className="space-y-2">
+              <Label htmlFor="cpf" className={cpfError ? "text-red-500" : ""}>CPF</Label>
+              <Input
+                id="cpf"
+                value={form.cpf}
+                onChange={(e) => {
+                  set("cpf", e.target.value);
+                  setCpfError("");
+                }}
+                className={cpfError ? "border-red-500 focus-visible:ring-red-500" : ""}
+                placeholder="000.000.000-00"
+              />
+              {cpfError && <p className="text-xs text-red-500">{cpfError}</p>}
+            </div>
+            <Field label="Data de Nascimento" value={form.birthDate} onChange={(v) => set("birthDate", v)} type="date" />
           </div>
         </section>
 
