@@ -1171,8 +1171,28 @@ function QuotesPanel({
   const [discount, setDiscount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("dinheiro");
   const [notes, setNotes] = useState("");
-  
   const [po, setPo] = useState({ supplier: "", description: "", total: "", refCode: "", term: "a_vista", paymentStatus: "pendente" });
+  const [poItems, setPoItems] = useState<{ id: string, description: string, refCode: string, quantity: number, unit_price: number, total: number }[]>([]);
+  const [newPoItem, setNewPoItem] = useState({ description: "", refCode: "", quantity: 1, unit_price: "" });
+  
+  const poTotal = poItems.reduce((acc, i) => acc + i.total, 0);
+
+  const handleAddPoItem = () => {
+    const price = parseFloat(newPoItem.unit_price.replace(",", ".") || "0");
+    if (!newPoItem.description || price <= 0) return toast.error("Preencha descrição e preço da peça.");
+    if (newPoItem.quantity <= 0) return toast.error("A quantidade deve ser maior que 0.");
+    
+    setPoItems([...poItems, {
+      id: crypto.randomUUID(),
+      description: newPoItem.description,
+      refCode: newPoItem.refCode,
+      quantity: newPoItem.quantity,
+      unit_price: price,
+      total: price * newPoItem.quantity
+    }]);
+    setNewPoItem({ description: "", refCode: "", quantity: 1, unit_price: "" });
+  };
+
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
   const [printState, setPrintState] = useState<{ id: string, action: "pdf" | "image" } | null>(null);
 
@@ -1341,8 +1361,7 @@ function QuotesPanel({
     mutationFn: async () => {
       const { data: userData } = await supabase.auth.getUser();
       const descJson = JSON.stringify({
-        text: po.description.trim(),
-        refCode: po.refCode.trim(),
+        items: poItems,
         term: po.term
       });
 
@@ -1351,7 +1370,7 @@ function QuotesPanel({
         supplier: po.supplier.trim() || null,
         description: descJson,
         status: po.paymentStatus,
-        total: Number(po.total || 0),
+        total: poTotal,
         created_by: userData.user?.id ?? null,
       });
       if (error) throw new Error(error.message);
@@ -1360,7 +1379,7 @@ function QuotesPanel({
         await supabase.from("expenses").insert({
           description: `Peça OS #${osData?.number} - Fornecedor: ${po.supplier}`,
           category: "pecas",
-          amount: Number(po.total || 0),
+          amount: poTotal,
           spent_at: new Date().toISOString(),
           created_by: userData.user?.id ?? null,
         });
@@ -1368,6 +1387,7 @@ function QuotesPanel({
     },
     onSuccess: () => {
       setPo({ supplier: "", description: "", total: "", refCode: "", term: "a_vista", paymentStatus: "pendente" });
+      setPoItems([]);
       toast.success("Pedido de compra registrado.");
       queryClient.invalidateQueries({ queryKey: ["purchase_orders", serviceOrderId] });
       queryClient.invalidateQueries({ queryKey: ["caixa"] });
@@ -1631,17 +1651,50 @@ function QuotesPanel({
 
       <div className="panel space-y-3 p-4 print:hidden">
         <h2 className="font-display text-lg">Pedido de compra de peças</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Input placeholder="Fornecedor" value={po.supplier} onChange={(e) => setPo({ ...po, supplier: e.target.value })} />
-          <Input placeholder="Cód. Referência (Opcional)" value={po.refCode} onChange={(e) => setPo({ ...po, refCode: e.target.value })} />
-        </div>
-        <Textarea rows={2} placeholder="Peças solicitadas" value={po.description} onChange={(e) => setPo({ ...po, description: e.target.value })} />
         
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Valor Total (R$)</Label>
-            <Input type="number" step="0.01" inputMode="decimal" placeholder="0.00" value={po.total} onChange={(e) => setPo({ ...po, total: e.target.value })} />
+        <Input placeholder="Fornecedor" value={po.supplier} onChange={(e) => setPo({ ...po, supplier: e.target.value })} />
+        
+        <div className="space-y-2 p-3 bg-muted/30 rounded-md border">
+          <p className="text-sm font-medium">Adicionar Peça</p>
+          <div className="grid gap-2 sm:grid-cols-12">
+            <div className="sm:col-span-5">
+              <Input placeholder="Descrição da peça..." value={newPoItem.description} onChange={e => setNewPoItem({ ...newPoItem, description: e.target.value })} />
+            </div>
+            <div className="sm:col-span-3">
+              <Input placeholder="Cód. Ref (Opc.)" value={newPoItem.refCode} onChange={e => setNewPoItem({ ...newPoItem, refCode: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <Input type="number" min="1" placeholder="Qtd" value={newPoItem.quantity} onChange={e => setNewPoItem({ ...newPoItem, quantity: Number(e.target.value) })} />
+            </div>
+            <div className="sm:col-span-2">
+              <Input type="number" step="0.01" inputMode="decimal" placeholder="Preço" value={newPoItem.unit_price} onChange={e => setNewPoItem({ ...newPoItem, unit_price: e.target.value })} />
+            </div>
           </div>
+          <Button variant="outline" className="w-full" onClick={handleAddPoItem}>
+            Adicionar Peça
+          </Button>
+        </div>
+
+        {poItems.length > 0 && (
+          <div className="space-y-2">
+            {poItems.map(item => (
+              <div key={item.id} className="flex items-center justify-between p-2 text-sm border rounded-md">
+                <div>
+                  <p className="font-medium">{item.quantity}x {item.description}</p>
+                  {item.refCode ? <p className="text-xs text-muted-foreground">Ref: {item.refCode}</p> : null}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-medium">{brl(item.total)}</span>
+                  <button onClick={() => setPoItems(poItems.filter(i => i.id !== item.id))} className="text-red-500 hover:text-red-700">
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        <div className="grid gap-3 sm:grid-cols-2 mt-4">
           <div className="space-y-1">
             <Label className="text-xs">Forma de Pagto</Label>
             <Select value={po.term} onValueChange={(v) => setPo({ ...po, term: v })}>
@@ -1664,15 +1717,20 @@ function QuotesPanel({
           </div>
         </div>
         
-        <Button variant="secondary" className="w-full" onClick={() => createPo.mutate()} disabled={createPo.isPending}>
+        <div className="flex items-center justify-between py-2 border-t mt-4">
+          <p className="text-sm font-medium">Total do Pedido:</p>
+          <p className="font-display text-lg text-primary">{brl(poTotal)}</p>
+        </div>
+
+        <Button variant="secondary" className="w-full" onClick={() => createPo.mutate()} disabled={createPo.isPending || poItems.length === 0}>
           Registrar pedido de compra
         </Button>
       </div>
 
       {(purchases.data ?? []).map((p) => {
-        let meta = { text: p.description, refCode: "", term: "" };
+        let meta: any = { refCode: "", term: "", items: [] };
         try { meta = JSON.parse(p.description || "{}"); } catch(e) {}
-        if (!meta.text) meta.text = p.description;
+        if (!meta.items && !meta.text) meta.text = p.description;
 
         return (
           <div key={p.id} className="panel p-4 text-sm print:hidden">
@@ -1692,6 +1750,17 @@ function QuotesPanel({
             
             {meta.refCode ? <p className="text-xs font-mono text-muted-foreground mt-1">Ref: {meta.refCode}</p> : null}
             {meta.text ? <p className="mt-2 whitespace-pre-wrap">{meta.text}</p> : null}
+            
+            {meta.items && meta.items.length > 0 ? (
+              <div className="mt-3 space-y-1 divide-y border-t pt-2">
+                {meta.items.map((item: any, i: number) => (
+                  <div key={i} className="flex justify-between items-center py-1 text-xs">
+                    <span className="text-muted-foreground">{item.quantity}x {item.description} {item.refCode ? `(Ref: ${item.refCode})` : ""}</span>
+                    <span className="font-medium">{brl(item.total)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             {p.status !== "pago" && (
               <Button size="sm" variant="outline" className="w-full mt-3 gap-2" onClick={() => payPo.mutate(p)} disabled={payPo.isPending}>
