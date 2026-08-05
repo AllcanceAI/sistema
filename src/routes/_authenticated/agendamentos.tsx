@@ -105,49 +105,18 @@ function Agendamentos() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const startOS = useMutation({
-    mutationFn: async (a: Appointment) => {
-      const plate = a.plate?.trim() || `S/P-${Math.floor(Math.random() * 9999)}`;
-      const { data: userData } = await supabase.auth.getUser();
-
-      let clientId: string | undefined;
-      if (a.client_name) {
-        const { data: clientSearch } = await supabase.from("clients").select("id").ilike("name", a.client_name).limit(1).maybeSingle();
-        if (clientSearch) clientId = clientSearch.id;
-        else {
-          const { data: newClient } = await supabase.from("clients").insert({ name: a.client_name }).select("id").single();
-          if (newClient) clientId = newClient.id;
-        }
-      }
-
-      let vehicleId: string;
-      const { data: vehicleSearch } = await supabase.from("vehicles").select("id").eq("plate", plate.toUpperCase()).limit(1).maybeSingle();
-      if (vehicleSearch) vehicleId = vehicleSearch.id;
-      else {
-        const { data: newVehicle, error: vErr } = await supabase.from("vehicles").insert({ plate: plate.toUpperCase(), client_id: clientId }).select("id").single();
-        if (vErr) throw new Error("Erro ao criar veículo: " + vErr.message);
-        vehicleId = newVehicle.id;
-      }
-
-      const { data: newOs, error: osErr } = await supabase.from("service_orders").insert({
-        vehicle_id: vehicleId,
-        client_id: clientId,
-        complaint: a.service || a.notes,
-        created_by: userData.user?.id,
-        mode: "analise", // Fixed: missing required mode
-      }).select("id").single();
-
-      if (osErr) throw new Error("Erro ao criar OS: " + osErr.message);
-
-      await supabase.from("appointments").update({ status: "compareceu" }).eq("id", a.id);
-      return newOs.id;
-    },
-    onSuccess: (osId) => {
-      toast.success("Ordem de Serviço iniciada!");
-      navigate({ to: "/os/$id", params: { id: osId } });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  const handleStartOS = (a: Appointment) => {
+    navigate({
+      to: "/os/nova",
+      search: {
+        appointmentId: a.id,
+        clientName: a.client_name ?? undefined,
+        phone: a.phone ?? undefined,
+        plate: a.plate ?? undefined,
+        complaint: (a.service || a.notes) ?? undefined,
+      },
+    });
+  };
 
   const updateAppointmentStatus = useMutation({
     mutationFn: async ({ id, status, scheduled_at }: { id: string; status: string; scheduled_at?: string }) => {
@@ -343,8 +312,8 @@ function Agendamentos() {
                     </Button>
 
                     {/* Status selection actions */}
-                    <Button size="sm" variant="default" className="gap-1 bg-primary text-primary-foreground" onClick={() => startOS.mutate(a)} disabled={startOS.isPending}>
-                      {startOS.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />} Abrir OS
+                    <Button size="sm" variant="default" className="gap-1 bg-primary text-primary-foreground" onClick={() => handleStartOS(a)}>
+                      <FileText className="size-3.5" /> Abrir OS
                     </Button>
 
                     {a.status !== "confirmado" && (
@@ -422,8 +391,8 @@ function Agendamentos() {
                   {a.service && <p className="text-xs text-muted-foreground">{a.service}</p>}
                 </div>
                 <div className="flex flex-wrap gap-1 mt-2 md:mt-0">
-                  <Button size="sm" variant="default" className="bg-primary text-primary-foreground gap-1" onClick={() => startOS.mutate(a)} disabled={startOS.isPending} title="Iniciar OS">
-                    {startOS.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />} Abrir OS
+                  <Button size="sm" variant="default" className="bg-primary text-primary-foreground gap-1" onClick={() => handleStartOS(a)} title="Iniciar OS">
+                    <FileText className="size-3.5" /> Abrir OS
                   </Button>
 
                   <Button size="sm" variant="outline" className="text-green-600" onClick={() => whatsapp(a)}>

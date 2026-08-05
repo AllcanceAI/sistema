@@ -20,7 +20,24 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+type NovaOsSearch = {
+  appointmentId?: string;
+  clientName?: string;
+  phone?: string;
+  plate?: string;
+  complaint?: string;
+};
+
 export const Route = createFileRoute("/_authenticated/os/nova")({
+  validateSearch: (search: Record<string, unknown>): NovaOsSearch => {
+    return {
+      appointmentId: search.appointmentId as string | undefined,
+      clientName: search.clientName as string | undefined,
+      phone: search.phone as string | undefined,
+      plate: search.plate as string | undefined,
+      complaint: search.complaint as string | undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Nova ordem de serviço — Oficina" },
@@ -35,19 +52,20 @@ export const Route = createFileRoute("/_authenticated/os/nova")({
 
 function NovaOs() {
   const navigate = useNavigate();
+  const searchParams = Route.useSearch();
   const [mode, setMode] = useState<"express" | "analise">("express");
   const [form, setForm] = useState({
-    clientName: "",
-    phone: "",
+    clientName: searchParams.clientName || "",
+    phone: searchParams.phone || "",
     email: "",
     companyId: "",
-    plate: "",
+    plate: searchParams.plate || "",
     brand: "",
     model: "",
     year: "",
     color: "",
     km: "",
-    complaint: "",
+    complaint: searchParams.complaint || "",
     estimatedMinutes: "60",
     mechanicId: "",
   });
@@ -178,6 +196,11 @@ function NovaOs() {
         .select("id")
         .single();
       if (orderError) throw new Error(orderError.message);
+
+      if (searchParams.appointmentId) {
+        await supabase.from("appointments").update({ status: "compareceu" }).eq("id", searchParams.appointmentId);
+      }
+
       return order.id;
     },
     onSuccess: (id) => {
