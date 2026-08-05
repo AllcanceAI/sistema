@@ -1,8 +1,13 @@
 import { brl } from "@/routes/_authenticated/painel";
 import hmLogo from "@/assets/hm-logo.png.asset.json";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export function PrintableQuote({ osData, quote, forceVisible = false }: { osData: any; quote: any; forceVisible?: boolean }) {
-  if (!quote) return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!quote || !mounted) return null;
 
   const dateNow = new Date();
   const dataCriacao = new Date(quote.created_at).toLocaleString("pt-BR");
@@ -12,13 +17,16 @@ export function PrintableQuote({ osData, quote, forceVisible = false }: { osData
   const parts = items.filter((i: any) => i.kind === "peca");
   const labor = items.filter((i: any) => i.kind === "servico");
 
-  return (
+  return createPortal(
     <div 
       id="printable-quote"
       className={`${forceVisible ? "block fixed top-[-9999px] left-[-9999px] w-[210mm]" : "hidden print:block w-full absolute top-0 left-0 right-0"} bg-white z-[9999] text-black font-sans h-[296mm] overflow-hidden p-8 text-sm box-border`}
     >
       <style>{`
         @media print {
+          body > *:not(#printable-quote) {
+            display: none !important;
+          }
           @page { 
             margin: 0;
             size: A4;
@@ -161,6 +169,7 @@ export function PrintableQuote({ osData, quote, forceVisible = false }: { osData
           Assinatura cliente
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
