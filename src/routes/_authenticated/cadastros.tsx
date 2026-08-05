@@ -121,6 +121,18 @@ function Cadastros() {
     onError: (error: Error) => toast.error("Não é possível excluir cliente que possui Ordens de Serviço."),
   });
 
+  const deleteVehicle = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("vehicles").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Veículo excluído.");
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+    },
+    onError: (error: Error) => toast.error("Não é possível excluir veículo que possui Ordens de Serviço."),
+  });
+
   return (
     <AppShell title="Cadastros" subtitle="Empresas, clientes e frota">
       <Tabs defaultValue="empresas">
@@ -294,15 +306,33 @@ function Cadastros() {
 
         <TabsContent value="veiculos" className="mt-3 space-y-2">
           {(vehicles.data ?? []).map((v) => (
-            <div key={v.id} className="panel p-3 text-sm">
-              <p className="flex items-center gap-2 font-display text-xl leading-none">
-                <Car className="size-4 text-primary" /> {v.plate}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {[v.brand, v.model, v.year, v.color, v.companies?.name ?? v.clients?.name]
-                  .filter(Boolean)
-                  .join(" · ") || "—"}
-              </p>
+            <div key={v.id} className="panel p-3 text-sm flex items-start justify-between gap-4">
+              <div>
+                <p className="flex items-center gap-2 font-display text-xl leading-none">
+                  <Car className="size-4 text-primary" /> {v.plate}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {[v.brand, v.model, v.year, v.color, v.companies?.name ?? v.clients?.name]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
+                </p>
+              </div>
+              {editable && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 hover:bg-red-50 hover:text-red-600"
+                    onClick={() => {
+                      if (confirm(`Tem certeza que deseja excluir o veículo ${v.plate}?`)) {
+                        deleteVehicle.mutate(v.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-4 text-muted-foreground hover:text-red-600" />
+                  </Button>
+                </div>
+              )}
             </div>
           ))}
           {(vehicles.data ?? []).length === 0 ? (
