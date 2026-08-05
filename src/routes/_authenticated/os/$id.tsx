@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import * as htmlToImage from "html-to-image";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Send, LogIn, Trash2, XCircle, Pencil, Image as ImageIcon } from "lucide-react";
+import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Unlock, Send, LogIn, Trash2, XCircle, Pencil, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { PrintableQuote } from "@/components/PrintableQuote";
 import {
   Select,
@@ -88,6 +89,11 @@ function OsDetalhe() {
   const [editReason, setEditReason] = useState("");
   const [editRequestSent, setEditRequestSent] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("entrada");
+
+  const [overrideActive, setOverrideActive] = useState(false);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const MANAGER_PIN = "2512";
 
   const order = useQuery({
     queryKey: ["order", id],
@@ -297,6 +303,27 @@ function OsDetalhe() {
       subtitle={`${os.mode === "express" ? "Express" : "Análise completa"} · ${OS_STATUS_LABELS[os.status]}`}
       action={
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {!overrideActive && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-orange-200 text-orange-600 hover:bg-orange-50 font-bold"
+              onClick={() => setPinModalOpen(true)}
+            >
+              <Lock className="size-4 mr-1" /> Destravar OS
+            </Button>
+          )}
+          {overrideActive && (
+            <Button
+              variant="default"
+              size="sm"
+              className="bg-orange-500 hover:bg-orange-600 font-bold text-white"
+              onClick={() => setOverrideActive(false)}
+            >
+              <Unlock className="size-4 mr-1" /> Modo Gerente Ativo
+            </Button>
+          )}
+
           {editable && os.status !== "cancelado" && (
             <Button
               variant="destructive"
@@ -515,9 +542,9 @@ function OsDetalhe() {
             </div>
           )}
           <ChecklistSection 
-            serviceOrderId={id} 
+            serviceOrderId={os.id} 
             kind="entrada" 
-            canEdit={editable && activeStepIndex === 0} 
+            canEdit={overrideActive || (editable && activeStepIndex === 0)} 
             onComplete={() => updateOrder.mutate({ status: os.mode === "express" ? "orcamento" : "diagnostico" })}
           />
           {/* Fotos gerais de entrada — sempre disponível mesmo após etapa trancada */}
@@ -554,7 +581,7 @@ function OsDetalhe() {
                 id="diagnosis"
                 rows={4}
                 defaultValue={os.diagnosis ?? ""}
-                disabled={activeStepIndex > 1 || (!can(me, "lancar_diagnostico") && os.mechanic_id !== me?.userId)}
+                disabled={!overrideActive && (activeStepIndex > 1 || (!can(me, "lancar_diagnostico") && os.mechanic_id !== me?.userId))}
                 onBlur={(e) =>
                   e.target.value !== (os.diagnosis ?? "") &&
                   updateOrder.mutate({ diagnosis: e.target.value })
@@ -567,7 +594,7 @@ function OsDetalhe() {
                 id="solution"
                 rows={4}
                 defaultValue={os.solution ?? ""}
-                disabled={activeStepIndex > 1 || (!can(me, "lancar_diagnostico") && os.mechanic_id !== me?.userId)}
+                disabled={!overrideActive && (activeStepIndex > 1 || (!can(me, "lancar_diagnostico") && os.mechanic_id !== me?.userId))}
                 onBlur={(e) =>
                   e.target.value !== (os.solution ?? "") &&
                   updateOrder.mutate({ solution: e.target.value })
@@ -576,10 +603,10 @@ function OsDetalhe() {
             </div>
           </div>
           <ChecklistSection 
-            serviceOrderId={id} 
+            serviceOrderId={os.id} 
             kind="diagnostico" 
-            canEdit={editable && activeStepIndex === 1} 
-            onComplete={() => updateOrder.mutate({ status: "orcamento" })}
+            canEdit={overrideActive || (editable && activeStepIndex === 1)} 
+            onComplete={() => updateOrder.mutate({ status: "orcamento" })} 
           />
           <MediaSection
             serviceOrderId={id}
