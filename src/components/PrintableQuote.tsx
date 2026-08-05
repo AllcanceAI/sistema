@@ -15,12 +15,13 @@ export function PrintableQuote({ osData, quote, forceVisible = false }: { osData
   return (
     <div 
       id="printable-quote"
-      className={`${forceVisible ? "block absolute top-0 left-0 w-[210mm] z-[-1]" : "hidden print:block w-full absolute top-0 left-0 right-0"} bg-white text-black font-sans p-8 text-sm box-border`}
+      className={`${forceVisible ? "block fixed top-[-9999px] left-[-9999px] w-[210mm]" : "hidden print:block w-full absolute top-0 left-0 right-0"} bg-white z-[9999] text-black font-sans h-[296mm] overflow-hidden p-8 text-sm box-border`}
     >
       <style>{`
         @media print {
           @page { 
             margin: 0;
+            size: A4;
           }
           body { 
             -webkit-print-color-adjust: exact;
