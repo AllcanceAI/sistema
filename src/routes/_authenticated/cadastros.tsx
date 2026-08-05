@@ -37,6 +37,9 @@ function Cadastros() {
     email: string;
   } | null>(null);
 
+  const [editingCompany, setEditingCompany] = useState<any>(null);
+  const [newClient, setNewClient] = useState({ name: "", phone: "", email: "" });
+
   const companies = useQuery({
     queryKey: ["companies", "all"],
     queryFn: async () => {
@@ -85,6 +88,54 @@ function Cadastros() {
       setCompany({ name: "", cnpj: "", contact: "", phone: "", email: "" });
       toast.success("Empresa credenciada cadastrada.");
       queryClient.invalidateQueries({ queryKey: ["companies"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const updateCompany = useMutation({
+    mutationFn: async (comp: any) => {
+      const { error } = await supabase.from("companies").update({
+        name: comp.name.trim(),
+        cnpj: comp.cnpj.trim() || null,
+        contact_name: comp.contact.trim() || null,
+        phone: comp.phone.trim() || null,
+        email: comp.email.trim() || null,
+      }).eq("id", comp.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      setEditingCompany(null);
+      toast.success("Empresa atualizada.");
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const deleteCompany = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("companies").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Empresa excluída.");
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+    },
+    onError: (error: Error) => toast.error("Não é possível excluir empresa que possui Ordens de Serviço."),
+  });
+
+  const createClient = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("clients").insert({
+        name: newClient.name.trim(),
+        phone: newClient.phone.trim() || null,
+        email: newClient.email.trim() || null,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      setNewClient({ name: "", phone: "", email: "" });
+      toast.success("Cliente cadastrado.");
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -213,15 +264,76 @@ function Cadastros() {
 
           {(companies.data ?? []).map((c) => (
             <div key={c.id} className="panel p-3 text-sm">
-              <p className="font-medium">{c.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {[c.cnpj, c.contact_name, c.phone, c.email].filter(Boolean).join(" · ") || "—"}
-              </p>
+              {editingCompany?.id === c.id ? (
+                <div className="space-y-3">
+                  <Input placeholder="Nome" value={editingCompany.name} onChange={(e) => setEditingCompany({ ...editingCompany, name: e.target.value })} />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input placeholder="CNPJ" value={editingCompany.cnpj} onChange={(e) => setEditingCompany({ ...editingCompany, cnpj: e.target.value })} />
+                    <Input placeholder="Contato" value={editingCompany.contact} onChange={(e) => setEditingCompany({ ...editingCompany, contact: e.target.value })} />
+                    <Input placeholder="Telefone" value={editingCompany.phone} onChange={(e) => setEditingCompany({ ...editingCompany, phone: e.target.value })} />
+                    <Input placeholder="E-mail" value={editingCompany.email} onChange={(e) => setEditingCompany({ ...editingCompany, email: e.target.value })} />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setEditingCompany(null)}>Cancelar</Button>
+                    <Button size="sm" onClick={() => updateCompany.mutate(editingCompany)} disabled={updateCompany.isPending}>Salvar</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-medium">{c.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {[c.cnpj, c.contact_name, c.phone, c.email].filter(Boolean).join(" · ") || "—"}
+                    </p>
+                  </div>
+                  {editable && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button variant="ghost" size="icon" className="size-8" onClick={() => setEditingCompany({ id: c.id, name: c.name, cnpj: c.cnpj || "", contact: c.contact_name || "", phone: c.phone || "", email: c.email || "" })}>
+                        <Pen className="size-4 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="size-8 hover:bg-red-50 hover:text-red-600" onClick={() => { if (confirm("Excluir empresa?")) deleteCompany.mutate(c.id); }}>
+                        <Trash2 className="size-4 text-muted-foreground hover:text-red-600" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </TabsContent>
 
         <TabsContent value="clientes" className="mt-3 space-y-2">
+          {editable ? (
+            <form
+              className="panel space-y-3 p-4 mb-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                createClient.mutate();
+              }}
+            >
+              <h2 className="flex items-center gap-2 font-display text-lg">
+                <Users className="size-4 text-primary" /> Novo cliente particular
+              </h2>
+              <div className="space-y-2">
+                <Label htmlFor="clname">Nome do cliente</Label>
+                <Input id="clname" required value={newClient.name} onChange={(e) => setNewClient({ ...newClient, name: e.target.value })} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="clphone">Telefone</Label>
+                  <Input id="clphone" type="tel" value={newClient.phone} onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="clemail">E-mail</Label>
+                  <Input id="clemail" type="email" value={newClient.email} onChange={(e) => setNewClient({ ...newClient, email: e.target.value })} />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={createClient.isPending}>
+                Cadastrar cliente
+              </Button>
+            </form>
+          ) : null}
+
           {(clients.data ?? []).map((c) => (
             <div key={c.id} className="panel p-3 text-sm">
               {editingClient?.id === c.id ? (
@@ -299,7 +411,7 @@ function Cadastros() {
           ))}
           {(clients.data ?? []).length === 0 ? (
             <p className="panel p-6 text-center text-sm text-muted-foreground">
-              Clientes são criados junto com a ordem de serviço.
+              Nenhum cliente cadastrado ainda.
             </p>
           ) : null}
         </TabsContent>
