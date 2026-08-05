@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Building2, Car, Users, Pen, Trash2 } from "lucide-react";
@@ -577,6 +577,16 @@ function Cadastros() {
                   </div>
                   {editable && (
                     <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                      >
+                        <Link to="/os/nova" search={{ plate: v.plate, clientName: v.clients?.name }}>
+                          <Car className="size-4" /> Dar Entrada
+                        </Link>
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
