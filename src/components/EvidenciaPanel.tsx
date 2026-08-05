@@ -91,10 +91,7 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid sm:grid-cols-2 gap-4">
-        <MediaSection serviceOrderId={serviceOrderId} stage="defeito" title="Adicionar fotos Antes (Defeito)" />
-        <MediaSection serviceOrderId={serviceOrderId} stage="servico_concluido" title="Adicionar fotos Depois (Serviço)" />
-      </div>
+      {/* Upload buttons removed from here as requested */}
 
       <div className="flex justify-between items-center bg-secondary/10 p-3 rounded-lg border">
         <div>
@@ -175,10 +172,12 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
                       <div className="relative aspect-square">
                         <img src={m.url} alt="Antes" className="w-full h-full object-cover" />
                       </div>
-                      {m.description && (
-                        <div className="p-2 text-xs text-slate-700 font-medium break-words leading-tight bg-white border-t">
+                      {m.description ? (
+                        <div className="flex-1 p-2 text-xs text-slate-700 font-medium break-words leading-tight bg-white border-t">
                           {m.description}
                         </div>
+                      ) : (
+                        <div className="flex-1 bg-white border-t"></div>
                       )}
                     </div>
                   ))}
@@ -199,10 +198,12 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
                       <div className="relative aspect-square">
                         <img src={m.url} alt="Depois" className="w-full h-full object-cover" />
                       </div>
-                      {m.description && (
-                        <div className="p-2 text-xs text-slate-700 font-medium break-words leading-tight bg-white border-t">
+                      {m.description ? (
+                        <div className="flex-1 p-2 text-xs text-slate-700 font-medium break-words leading-tight bg-white border-t">
                           {m.description}
                         </div>
+                      ) : (
+                        <div className="flex-1 bg-white border-t"></div>
                       )}
                     </div>
                   ))}
