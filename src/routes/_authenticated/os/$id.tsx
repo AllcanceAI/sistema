@@ -512,7 +512,12 @@ function OsDetalhe() {
               </Button>
             </div>
           )}
-          <ChecklistSection serviceOrderId={id} kind="entrada" canEdit={editable && activeStepIndex === 0} />
+          <ChecklistSection 
+            serviceOrderId={id} 
+            kind="entrada" 
+            canEdit={editable && activeStepIndex === 0} 
+            onComplete={() => updateOrder.mutate({ status: os.mode === "express" ? "orcamento" : "diagnostico" })}
+          />
           {/* Fotos gerais de entrada — sempre disponível mesmo após etapa trancada */}
           <MediaSection
             serviceOrderId={id}
@@ -568,7 +573,12 @@ function OsDetalhe() {
               />
             </div>
           </div>
-          <ChecklistSection serviceOrderId={id} kind="diagnostico" canEdit={editable && activeStepIndex === 1} />
+          <ChecklistSection 
+            serviceOrderId={id} 
+            kind="diagnostico" 
+            canEdit={editable && activeStepIndex === 1} 
+            onComplete={() => updateOrder.mutate({ status: "orcamento" })}
+          />
           <MediaSection
             serviceOrderId={id}
             stage="defeito"
@@ -593,6 +603,23 @@ function OsDetalhe() {
             />
           </div>
           <MediaSection serviceOrderId={id} stage="outro" title="📷 Fotos adicionais da execução" />
+          
+          {editable && os.status === "em_execucao" && (
+            <div className="mt-8 flex justify-end">
+              <Button
+                size="lg"
+                className="w-full sm:w-auto font-bold bg-green-600 hover:bg-green-700 text-white gap-2"
+                onClick={() => {
+                  if (confirm("Deseja confirmar a conclusão do serviço e liberar o veículo para entrega?")) {
+                    updateOrder.mutate({ status: "concluido" });
+                  }
+                }}
+              >
+                <CheckCircle2 className="size-5" />
+                Concluir Serviço (Pronto para Entrega)
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="orcamento" className="mt-3 space-y-3">

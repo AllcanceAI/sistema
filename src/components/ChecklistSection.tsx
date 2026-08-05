@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ListChecks, Camera, Trash2, ImagePlus } from "lucide-react";
+import { Loader2, ListChecks, Camera, Trash2, ImagePlus, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,6 +29,7 @@ export function ChecklistSection({
   serviceOrderId: string;
   kind: "entrada" | "diagnostico";
   canEdit: boolean;
+  onComplete?: () => void;
 }) {
   const queryClient = useQueryClient();
   const CHECKLIST_KEY = ["checklist", serviceOrderId, kind];
@@ -403,6 +404,24 @@ export function ChecklistSection({
         }
         excludeItemPhotos
       />
+
+      {/* ── Advance status button ──────────────────────────────────────────── */}
+      {canEdit && onComplete && (
+        <div className="mt-8 flex justify-end">
+          <Button
+            size="lg"
+            className="w-full sm:w-auto font-bold bg-green-600 hover:bg-green-700 text-white gap-2"
+            onClick={() => {
+              if (confirm("Deseja confirmar a conclusão desta etapa e avançar a Ordem de Serviço?")) {
+                onComplete();
+              }
+            }}
+          >
+            <CheckCircle2 className="size-5" />
+            Concluir {kind === "entrada" ? "Laudo de Entrada" : "Diagnóstico"} e Avançar
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
