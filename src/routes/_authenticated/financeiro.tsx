@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Loader2, Plus, Trash2, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Loader2, Plus, Trash2, TrendingDown, TrendingUp, Wallet, FileText, CheckCircle, CheckCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -92,6 +92,62 @@ function Financeiro() {
     },
   });
 
+  const osSummary = useQuery({
+    enabled: allowed,
+    queryKey: ["caixa", "os_summary", fromIso, toIso],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("service_orders")
+        .select(`
+          id,
+          status,
+          created_at,
+          quotes (total, created_at),
+          payments (amount)
+        `)
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso);
+
+      if (error) throw new Error(error.message);
+
+      let countPendente = 0;
+      let countFinalizado = 0;
+      let countPago = 0;
+      let valorPendente = 0;
+      let valorFinalizado = 0;
+      let valorPago = 0;
+
+      for (const os of data || []) {
+        const latestQuote = os.quotes?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        const osTotal = latestQuote ? Number(latestQuote.total) : 0;
+        
+        const osPaid = (os.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+
+        if (os.status === "orcamento" || os.status === "aguardando_aprovacao") {
+          countPendente++;
+          valorPendente += osTotal;
+        } else if (os.status !== "recebido" && os.status !== "checklist" && os.status !== "diagnostico") {
+          countFinalizado++;
+          valorFinalizado += osTotal;
+
+          if (osTotal > 0 && osPaid >= osTotal) {
+            countPago++;
+            valorPago += osTotal;
+          }
+        }
+      }
+
+      return {
+        countPendente,
+        valorPendente,
+        countFinalizado,
+        valorFinalizado,
+        countPago,
+        valorPago,
+      };
+    }
+  });
+
   const addExpense = useMutation({
     mutationFn: async () => {
       const amount = Number(expense.amount.replace(",", "."));
@@ -161,6 +217,12 @@ function Financeiro() {
         <Kpi label="Entradas" value={brl(totals.entrada)} icon={<TrendingUp className="size-4" />} tone="ok" />
         <Kpi label="Saídas" value={brl(totals.saida)} icon={<TrendingDown className="size-4" />} tone="warn" />
         <Kpi label="Saldo" value={brl(totals.saldo)} icon={<Wallet className="size-4" />} tone={totals.saldo < 0 ? "warn" : "default"} />
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <Kpi label={`Orçamentos Pendentes (${osSummary.data?.countPendente || 0})`} value={brl(osSummary.data?.valorPendente || 0)} icon={<FileText className="size-4" />} tone="warn" />
+        <Kpi label={`Orçamentos Aprovados (${osSummary.data?.countFinalizado || 0})`} value={brl(osSummary.data?.valorFinalizado || 0)} icon={<CheckCircle className="size-4" />} tone="ok" />
+        <Kpi label={`OS Totalmente Pagas (${osSummary.data?.countPago || 0})`} value={brl(osSummary.data?.valorPago || 0)} icon={<CheckCheck className="size-4" />} tone="ok" />
       </div>
 
       {Object.keys(totals.porForma).length > 0 ? (
