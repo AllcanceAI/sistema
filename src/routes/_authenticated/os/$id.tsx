@@ -142,6 +142,27 @@ function OsDetalhe() {
     queryClient.invalidateQueries({ queryKey: ["approvals", id] });
   };
 
+  // Keep tab in sync with workflow progression (must be above early returns)
+  useEffect(() => {
+    if (!order.data) return;
+    const s = order.data.status;
+    let idx = 0;
+    if (s === "diagnostico") idx = 1;
+    else if (s === "orcamento") idx = 2;
+    else if (s === "aguardando_aprovacao") idx = 3;
+    else if (s === "aprovado") idx = 4;
+    else if (s === "compra_pecas") idx = 5;
+    else if (s === "em_execucao") idx = 6;
+    else if (s === "concluido") idx = 7;
+    else if (s === "entregue") idx = 8;
+
+    if (idx === 0) setActiveTab("entrada");
+    else if (idx === 1) setActiveTab("diagnostico");
+    else if (idx === 2 || idx === 3) setActiveTab("orcamento");
+    else if (idx === 4 || idx === 5) setActiveTab("aprovacoes");
+    else if (idx >= 6) setActiveTab("execucao");
+  }, [order.data?.status]);
+
   const updateOrder = useMutation({
     mutationFn: async (patch: Record<string, unknown>) => {
       const { error } = await supabase
@@ -252,14 +273,7 @@ function OsDetalhe() {
 
   const activeStepIndex = getActiveStep();
 
-  // Keep tab in sync with workflow progression
-  useEffect(() => {
-    if (activeStepIndex === 0) setActiveTab("entrada");
-    else if (activeStepIndex === 1) setActiveTab("diagnostico");
-    else if (activeStepIndex === 2 || activeStepIndex === 3) setActiveTab("orcamento");
-    else if (activeStepIndex === 4 || activeStepIndex === 5) setActiveTab("aprovacoes");
-    else if (activeStepIndex >= 6) setActiveTab("execucao");
-  }, [activeStepIndex]);
+  // useEffect moved above early returns
 
   return (
     <AppShell
