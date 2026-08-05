@@ -368,7 +368,7 @@ function OsDetalhe() {
 
         {editable ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {isManagerOrOwner && (
+            {(isManagerOrOwner || hasRole(me, "secretaria")) && (
               <>
                 <div className="space-y-2">
                   <Label>Situação Manual</Label>
@@ -1346,6 +1346,19 @@ function QuotesPanel({
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const deleteQuote = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("quotes").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Orçamento excluído!");
+      queryClient.invalidateQueries({ queryKey: ["quotes", serviceOrderId] });
+      onChange();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const handleEditQuote = (q: any) => {
     setEditingQuoteId(q.id);
     setNewPart({ description: "", quantity: 1, unit_price: "" });
@@ -1452,6 +1465,19 @@ function QuotesPanel({
       queryClient.invalidateQueries({ queryKey: ["caixa"] });
     },
     onError: (error: Error) => toast.error(error.message),
+  });
+
+  const deletePo = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("purchase_orders").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Pedido de compra excluído!");
+      queryClient.invalidateQueries({ queryKey: ["purchase_orders", serviceOrderId] });
+      onChange();
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   if (!visible) {
@@ -1660,6 +1686,19 @@ function QuotesPanel({
               >
                 <Printer className="size-3 mr-1.5" /> PDF
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={() => {
+                  if (confirm("Tem certeza que deseja excluir este orçamento? Esta ação não pode ser desfeita.")) {
+                    deleteQuote.mutate(q.id);
+                  }
+                }}
+                disabled={deleteQuote.isPending}
+              >
+                <Trash2 className="size-3 mr-1.5" /> Excluir
+              </Button>
             </div>
             <p className="font-display text-2xl leading-none text-primary">{brl(Number(q.total))}</p>
             <p className="mt-1 text-xs text-muted-foreground pr-48">
@@ -1808,13 +1847,20 @@ function QuotesPanel({
               </div>
             ) : null}
 
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <Button size="sm" variant="outline" className="w-full" onClick={() => handleEditPo(p)}>
-                Editar Pedido
+                Editar
+              </Button>
+              <Button size="sm" variant="outline" className="w-full text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => {
+                if(confirm("Tem certeza que deseja excluir este pedido?")) {
+                  deletePo.mutate(p.id);
+                }
+              }} disabled={deletePo.isPending}>
+                Excluir
               </Button>
               {p.status !== "pago" && (
                 <Button size="sm" variant="outline" className="w-full gap-2" onClick={() => payPo.mutate(p)} disabled={payPo.isPending}>
-                  <CheckCircle2 className="size-4" /> Pago / Baixar Caixa
+                  <CheckCircle2 className="size-4" /> Baixar Caixa
                 </Button>
               )}
             </div>

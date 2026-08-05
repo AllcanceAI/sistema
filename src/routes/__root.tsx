@@ -95,14 +95,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "Ordens de serviço, checklists com fotos, orçamentos e aprovações assinadas.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: "/hm-logo.png" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: "/hm-logo.png" },
+      { name: "application-name", content: "HM Auto Elétrica" },
+      { name: "apple-mobile-web-app-title", content: "HM Auto" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.json?v=2" },
+      { rel: "icon", href: "/favicon.ico?v=2", type: "image/x-icon" },
+      { rel: "shortcut icon", href: "/favicon.ico?v=2", type: "image/x-icon" },
+      { rel: "apple-touch-icon", href: "/hm-logo.png?v=2" },
+      { rel: "apple-touch-startup-image", href: "/hm-logo.png?v=2" },
+      { rel: "mask-icon", href: "/hm-logo.png?v=2", color: "#1b1f27" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -122,6 +131,18 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="pt-BR">
       <head>
         <HeadContent />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              "name": "HM Auto Elétrica",
+              "logo": "https://gabrielalvesoficial.com/hm-logo.png",
+              "url": "https://gabrielalvesoficial.com"
+            }),
+          }}
+        />
       </head>
       <body>
         {children}

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, ImagePlus, Loader2, Trash2, Video, X } from "lucide-react";
+import { Camera, ImagePlus, Loader2, Trash2, Video, X, Download } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { STAGE_LABELS } from "@/lib/roles";
@@ -238,16 +238,30 @@ export function MediaSection({
                     onClick={() => setLightbox(row.url)}
                   />
                 )}
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="destructive"
-                  className="absolute right-1 top-1 size-6 opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={() => remove.mutate(row)}
-                  aria-label="Remover mídia"
-                >
-                  <Trash2 className="size-3" />
-                </Button>
+                <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <a
+                    href={`${row.url}?download=`}
+                    download
+                    className="flex size-6 items-center justify-center rounded-md bg-secondary/90 text-foreground hover:bg-secondary"
+                    aria-label="Baixar mídia"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Download className="size-3" />
+                  </a>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="destructive"
+                    className="size-6"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      remove.mutate(row);
+                    }}
+                    aria-label="Remover mídia"
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
               </div>
               {row.description ? (
                 <figcaption
@@ -273,17 +287,33 @@ export function MediaSection({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
           onClick={() => setLightbox(null)}
         >
-          <img
-            src={lightbox}
-            alt="Visualização ampliada"
-            className="max-h-[90vh] max-w-full rounded object-contain"
-          />
-          <button
-            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/25"
-            onClick={() => setLightbox(null)}
-          >
-            <X className="size-5" />
-          </button>
+          <div className="relative h-full w-full max-w-5xl">
+            <div className="absolute right-0 top-0 z-10 flex gap-2">
+              <a
+                href={`${lightbox}?download=`}
+                download
+                className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                aria-label="Baixar mídia amplianda"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Download className="size-5" />
+              </a>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="size-10"
+                onClick={() => setLightbox(null)}
+              >
+                <X className="size-5" />
+              </Button>
+            </div>
+            <img
+              src={lightbox}
+              alt="Ampliada"
+              className="h-full w-full object-contain"
+            />
+          </div>
         </div>
       )}
     </div>
