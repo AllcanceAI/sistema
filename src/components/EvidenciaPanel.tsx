@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
+import { MediaSection } from "@/components/MediaSection";
 
 export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
   const [downloading, setDownloading] = useState(false);
@@ -92,6 +93,11 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
 
   return (
     <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 gap-4">
+        <MediaSection serviceOrderId={serviceOrderId} stage="defeito" title="Adicionar fotos Antes (Defeito)" />
+        <MediaSection serviceOrderId={serviceOrderId} stage="servico_concluido" title="Adicionar fotos Depois (Serviço)" />
+      </div>
+
       <div className="flex justify-between items-center bg-secondary/10 p-3 rounded-lg border">
         <div>
           <h3 className="font-bold text-sm">Relatório de Evidências (Locadora / Seguradora)</h3>
@@ -167,12 +173,14 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
                 </span>
                 <div className="grid grid-cols-2 gap-2">
                   {mediaBefore.slice(0, 4).map(m => (
-                    <div key={m.id} className="relative aspect-square border rounded bg-slate-50 overflow-hidden">
-                      <img src={m.url} alt="Antes" className="w-full h-full object-cover" />
+                    <div key={m.id} className="flex flex-col border rounded bg-slate-50 overflow-hidden">
+                      <div className="relative aspect-square">
+                        <img src={m.url} alt="Antes" className="w-full h-full object-cover" />
+                      </div>
                       {m.description && (
-                        <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] p-1 truncate">
+                        <div className="p-2 text-xs text-slate-700 font-medium break-words leading-tight bg-white border-t">
                           {m.description}
-                        </span>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -189,12 +197,14 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
                 </span>
                 <div className="grid grid-cols-2 gap-2">
                   {mediaAfter.slice(0, 4).map(m => (
-                    <div key={m.id} className="relative aspect-square border rounded bg-slate-50 overflow-hidden">
-                      <img src={m.url} alt="Depois" className="w-full h-full object-cover" />
+                    <div key={m.id} className="flex flex-col border rounded bg-slate-50 overflow-hidden">
+                      <div className="relative aspect-square">
+                        <img src={m.url} alt="Depois" className="w-full h-full object-cover" />
+                      </div>
                       {m.description && (
-                        <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] p-1 truncate">
+                        <div className="p-2 text-xs text-slate-700 font-medium break-words leading-tight bg-white border-t">
                           {m.description}
-                        </span>
+                        </div>
                       )}
                     </div>
                   ))}

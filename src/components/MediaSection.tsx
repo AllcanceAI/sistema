@@ -220,41 +220,42 @@ export function MediaSection({
           {items.map((row) => (
             <figure
               key={row.id}
-              className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border bg-secondary shadow-sm"
+              className="group relative flex w-24 shrink-0 flex-col overflow-hidden rounded-lg border bg-secondary shadow-sm"
             >
-              {row.mime_type?.startsWith("video") ? (
-                <video
-                  src={row.url}
-                  controls
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <img
-                  src={row.url}
-                  alt={row.description ?? "Foto do veículo"}
-                  loading="lazy"
-                  className="h-full w-full cursor-zoom-in object-cover transition-transform group-hover:scale-105"
-                  onClick={() => setLightbox(row.url)}
-                />
-              )}
+              <div className="relative h-24 w-24 shrink-0">
+                {row.mime_type?.startsWith("video") ? (
+                  <video
+                    src={row.url}
+                    controls
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={row.url}
+                    alt={row.description ?? "Foto do veículo"}
+                    loading="lazy"
+                    className="h-full w-full cursor-zoom-in object-cover transition-transform group-hover:scale-105"
+                    onClick={() => setLightbox(row.url)}
+                  />
+                )}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="destructive"
+                  className="absolute right-1 top-1 size-6 opacity-0 transition-opacity group-hover:opacity-100"
+                  onClick={() => remove.mutate(row)}
+                  aria-label="Remover mídia"
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              </div>
               {row.description ? (
                 <figcaption
-                  className="absolute bottom-0 inset-x-0 bg-black/70 px-1 py-0.5 text-[9px] text-white truncate text-center"
-                  title={row.description}
+                  className="p-1.5 text-xs text-slate-700 font-medium break-words leading-tight bg-white border-t"
                 >
                   {row.description}
                 </figcaption>
               ) : null}
-              <Button
-                type="button"
-                size="icon"
-                variant="destructive"
-                className="absolute right-1 top-1 size-6 opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => remove.mutate(row)}
-                aria-label="Remover mídia"
-              >
-                <Trash2 className="size-3" />
-              </Button>
             </figure>
           ))}
         </div>

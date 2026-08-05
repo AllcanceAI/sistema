@@ -42,11 +42,22 @@ export const Route = createFileRoute("/_authenticated/os/$id")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  errorComponent: () => (
-    <div className="p-8 text-center text-sm text-muted-foreground">
-      Não foi possível carregar esta ordem de serviço.
-    </div>
-  ),
+  errorComponent: (props: any) => {
+    // Log to console and send to supabase
+    console.error("OS Error:", props.error);
+    if (props.error) {
+      supabase.from("edit_requests").insert({
+        service_order_id: null,
+        stage: "error_log",
+        reason: String(props.error.stack || props.error.message),
+      }).then(() => {});
+    }
+    return (
+      <div className="p-8 text-center text-sm text-red-500 font-mono">
+        Não foi possível carregar esta ordem de serviço. Erro: {props?.error?.message || "Desconhecido"}
+      </div>
+    );
+  },
   notFoundComponent: () => (
     <div className="p-8 text-center text-sm text-muted-foreground">Ordem não encontrada.</div>
   ),
