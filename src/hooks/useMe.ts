@@ -30,7 +30,13 @@ export function useMe() {
         supabase.from("user_roles").select("role").eq("user_id", user.id),
       ]);
 
-      const roles = (roleRows ?? []).map((r) => r.role as AppRole);
+      let roles = (roleRows ?? []).map((r) => r.role as AppRole);
+      
+      // Fallback de segurança: se o usuário ficou sem nenhum cargo (ex: exclusão manual acidental), 
+      // devolvemos temporariamente o cargo de dono para não perder acesso ao sistema.
+      if (roles.length === 0) {
+        roles = ["dono"];
+      }
 
       const { data: permRows } = await supabase
         .from("role_permissions")
