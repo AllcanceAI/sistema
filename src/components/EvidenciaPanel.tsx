@@ -112,9 +112,16 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
         >
           {/* Header */}
           <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-center">
-            <div>
-              <h1 className="font-extrabold text-2xl tracking-wide uppercase">HM AUTO ELÉTRICA</h1>
-              <p className="text-[11px] text-slate-500 font-bold">LAUDO E COMPROVANTE DE EVIDÊNCIAS DE SERVIÇO</p>
+            <div className="flex items-center gap-4">
+              <img src="/hm-logo.png" alt="Logo" className="h-14 w-auto object-contain" />
+              <div>
+                <h1 className="font-extrabold text-2xl tracking-wide uppercase">HM AUTO ELÉTRICA</h1>
+                <p className="text-[10px] text-slate-500 font-semibold leading-tight">
+                  CNPJ: 66.473.569/0001-82<br/>
+                  Razão Social: 66.473.569 Jonatas Uriel Pereira dos Santos
+                </p>
+                <p className="text-[11px] text-slate-700 font-bold mt-1">LAUDO E COMPROVANTE DE EVIDÊNCIAS DE SERVIÇO</p>
+              </div>
             </div>
             <div className="text-right">
               <span className="bg-slate-950 text-white font-mono font-bold text-lg px-3 py-1 rounded">
