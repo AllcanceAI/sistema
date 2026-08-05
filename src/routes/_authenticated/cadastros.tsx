@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Building2, Car, Users } from "lucide-react";
+import { Building2, Car, Users, Pen, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -29,6 +29,13 @@ function Cadastros() {
   const queryClient = useQueryClient();
   const editable = can(me, "cadastrar_os");
   const [company, setCompany] = useState({ name: "", cnpj: "", contact: "", phone: "", email: "" });
+
+  const [editingClient, setEditingClient] = useState<{
+    id: string;
+    name: string;
+    phone: string;
+    email: string;
+  } | null>(null);
 
   const companies = useQuery({
     queryKey: ["companies", "all"],
@@ -80,6 +87,38 @@ function Cadastros() {
       queryClient.invalidateQueries({ queryKey: ["companies"] });
     },
     onError: (error: Error) => toast.error(error.message),
+  });
+
+  const updateClient = useMutation({
+    mutationFn: async (client: { id: string; name: string; phone: string; email: string }) => {
+      const { error } = await supabase
+        .from("clients")
+        .update({
+          name: client.name.trim(),
+          phone: client.phone.trim() || null,
+          email: client.email.trim() || null,
+        })
+        .eq("id", client.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      setEditingClient(null);
+      toast.success("Cliente atualizado.");
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const deleteClient = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("clients").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Cliente excluído.");
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+    onError: (error: Error) => toast.error("Não é possível excluir cliente que possui Ordens de Serviço."),
   });
 
   return (
@@ -173,12 +212,77 @@ function Cadastros() {
         <TabsContent value="clientes" className="mt-3 space-y-2">
           {(clients.data ?? []).map((c) => (
             <div key={c.id} className="panel p-3 text-sm">
-              <p className="flex items-center gap-2 font-medium">
-                <Users className="size-4 text-primary" /> {c.name}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {[c.phone, c.email, c.companies?.name].filter(Boolean).join(" · ") || "—"}
-              </p>
+              {editingClient?.id === c.id ? (
+                <div className="space-y-3">
+                  <Input
+                    placeholder="Nome"
+                    value={editingClient.name}
+                    onChange={(e) => setEditingClient({ ...editingClient, name: e.target.value })}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      placeholder="Telefone"
+                      value={editingClient.phone}
+                      onChange={(e) => setEditingClient({ ...editingClient, phone: e.target.value })}
+                    />
+                    <Input
+                      placeholder="E-mail"
+                      value={editingClient.email}
+                      onChange={(e) => setEditingClient({ ...editingClient, email: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setEditingClient(null)}>
+                      Cancelar
+                    </Button>
+                    <Button size="sm" onClick={() => updateClient.mutate(editingClient)} disabled={updateClient.isPending}>
+                      Salvar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="flex items-center gap-2 font-medium">
+                      <Users className="size-4 text-primary" /> {c.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {[c.phone, c.email, c.companies?.name].filter(Boolean).join(" · ") || "Sem mais dados"}
+                    </p>
+                  </div>
+                  {editable && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() =>
+                          setEditingClient({
+                            id: c.id,
+                            name: c.name,
+                            phone: c.phone || "",
+                            email: c.email || "",
+                          })
+                        }
+                      >
+                        <Pen className="size-4 text-muted-foreground" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 hover:bg-red-50 hover:text-red-600"
+                        onClick={() => {
+                          if (confirm("Tem certeza que deseja excluir este cliente?")) {
+                            deleteClient.mutate(c.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="size-4 text-muted-foreground hover:text-red-600" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
           {(clients.data ?? []).length === 0 ? (

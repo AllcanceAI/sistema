@@ -1160,7 +1160,7 @@ function QuotesPanel({
   const { data: me } = useMe();
   const queryClient = useQueryClient();
   const visible = can(me, "ver_financeiro");
-  const [quote, setQuote] = useState({ parts: "", labor: "", notes: "" });
+  const [quote, setQuote] = useState({ parts: "", labor: "", discount: "", paymentMethod: "dinheiro", notes: "" });
   const [po, setPo] = useState({ supplier: "", description: "", total: "" });
 
   const quotes = useQuery({
@@ -1195,19 +1195,30 @@ function QuotesPanel({
     mutationFn: async () => {
       const parts = Number(quote.parts || 0);
       const labor = Number(quote.labor || 0);
+      const discount = Number(quote.discount || 0);
+      
+      let finalNotes = quote.notes.trim();
+      const headers = [];
+      if (discount > 0) headers.push(`Desconto concedido: R$ ${discount.toFixed(2)}`);
+      if (quote.paymentMethod) headers.push(`Forma de pagamento: ${quote.paymentMethod.toUpperCase()}`);
+      
+      if (headers.length > 0) {
+        finalNotes = `${headers.join(" | ")}\n\n${finalNotes}`.trim();
+      }
+
       const { data: userData } = await supabase.auth.getUser();
       const { error } = await supabase.from("quotes").insert({
         service_order_id: serviceOrderId,
         parts_total: parts,
         labor_total: labor,
-        total: parts + labor,
-        notes: quote.notes.trim() || null,
+        total: Math.max(0, parts + labor - discount),
+        notes: finalNotes || null,
         created_by: userData.user?.id ?? null,
       });
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      setQuote({ parts: "", labor: "", notes: "" });
+      setQuote({ parts: "", labor: "", discount: "", paymentMethod: "dinheiro", notes: "" });
       toast.success("Orçamento lançado.");
       queryClient.invalidateQueries({ queryKey: ["quotes", serviceOrderId] });
       onChange();
@@ -1270,6 +1281,36 @@ function QuotesPanel({
               value={quote.labor}
               onChange={(e) => setQuote({ ...quote, labor: e.target.value })}
             />
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="discount">Desconto (R$)</Label>
+            <Input
+              id="discount"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              value={quote.discount}
+              onChange={(e) => setQuote({ ...quote, discount: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Forma de pagamento</Label>
+            <Select
+              value={quote.paymentMethod}
+              onValueChange={(v) => setQuote({ ...quote, paymentMethod: v })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                <SelectItem value="pix">PIX</SelectItem>
+                <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
+                <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <Textarea
