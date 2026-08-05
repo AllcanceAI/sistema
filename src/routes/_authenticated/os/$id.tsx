@@ -699,6 +699,61 @@ function OsDetalhe() {
           </div>
         </div>
       )}
+      
+      {/* Manager Override PIN Modal */}
+      <Dialog open={pinModalOpen} onOpenChange={setPinModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Desbloqueio de Gerente</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Digite o PIN do gerente para habilitar a edição desta etapa bloqueada.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="pin">PIN de Liberação</Label>
+              <Input
+                id="pin"
+                type="password"
+                maxLength={4}
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (pinInput === MANAGER_PIN) {
+                      setOverrideActive(true);
+                      setPinModalOpen(false);
+                      setPinInput("");
+                      toast.success("Modo Gerente ativado. Edição liberada!");
+                    } else {
+                      toast.error("PIN incorreto.");
+                    }
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPinModalOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                if (pinInput === MANAGER_PIN) {
+                  setOverrideActive(true);
+                  setPinModalOpen(false);
+                  setPinInput("");
+                  toast.success("Modo Gerente ativado. Edição liberada!");
+                } else {
+                  toast.error("PIN incorreto.");
+                }
+              }}
+            >
+              Desbloquear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
