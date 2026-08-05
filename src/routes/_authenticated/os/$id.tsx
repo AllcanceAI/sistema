@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import * as htmlToImage from "html-to-image";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Send, LogIn, Trash2, XCircle } from "lucide-react";
+import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Send, LogIn, Trash2, XCircle, Pencil, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -1172,16 +1173,32 @@ function QuotesPanel({
   const [notes, setNotes] = useState("");
   
   const [po, setPo] = useState({ supplier: "", description: "", total: "" });
-  const [printingQuoteId, setPrintingQuoteId] = useState<string | null>(null);
+  const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
+  const [printState, setPrintState] = useState<{ id: string, action: "pdf" | "image" } | null>(null);
 
   useEffect(() => {
-    if (printingQuoteId) {
-      setTimeout(() => {
-        window.print();
-        setPrintingQuoteId(null);
+    if (printState) {
+      setTimeout(async () => {
+        if (printState.action === "pdf") {
+          window.print();
+        } else if (printState.action === "image") {
+          const el = document.getElementById("printable-quote");
+          if (el) {
+            try {
+              const dataUrl = await htmlToImage.toPng(el, { quality: 1, pixelRatio: 2 });
+              const link = document.createElement("a");
+              link.download = `orcamento-${osData?.number || "export"}.png`;
+              link.href = dataUrl;
+              link.click();
+            } catch (e) {
+              toast.error("Erro ao gerar imagem");
+            }
+          }
+        }
+        setPrintState(null);
       }, 500); // Wait for render
     }
-  }, [printingQuoteId]);
+  }, [printState, osData]);
 
   const quotes = useQuery({
     enabled: visible,
@@ -1241,30 +1258,46 @@ function QuotesPanel({
       const disc = Number(discount || 0);
       
       let finalNotes = notes.trim();
-      const headers = [];
-      if (disc > 0) headers.push(`Desconto concedido: R$ ${disc.toFixed(2)}`);
-      if (paymentMethod) headers.push(`Forma de pagamento: ${paymentMethod.toUpperCase()}`);
-      
-      if (headers.length > 0) {
-        finalNotes = `${headers.join(" | ")}\n\n${finalNotes}`.trim();
+      if (!editingQuoteId) {
+        const headers = [];
+        if (disc > 0) headers.push(`Desconto concedido: R$ ${disc.toFixed(2)}`);
+        if (paymentMethod) headers.push(`Forma de pagamento: ${paymentMethod.toUpperCase()}`);
+        
+        if (headers.length > 0) {
+          finalNotes = `${headers.join(" | ")}\n\n${finalNotes}`.trim();
+        }
       }
 
       const { data: userData } = await supabase.auth.getUser();
-      const { data: quoteData, error: quoteError } = await supabase.from("quotes").insert({
+      const quotePayload = {
         service_order_id: serviceOrderId,
         parts_total: partsTotal,
         labor_total: laborTotal,
         total: Math.max(0, partsTotal + laborTotal - disc),
         notes: finalNotes || null,
-        created_by: userData.user?.id ?? null,
-      }).select("id").single();
-      
-      if (quoteError) throw new Error(quoteError.message);
+      };
 
-      if (items.length > 0) {
+      let quoteId = editingQuoteId;
+
+      if (editingQuoteId) {
+        const { error: quoteError } = await supabase.from("quotes").update(quotePayload).eq("id", editingQuoteId);
+        if (quoteError) throw new Error(quoteError.message);
+        
+        const { error: delError } = await supabase.from("quote_items").delete().eq("quote_id", editingQuoteId);
+        if (delError) throw new Error(delError.message);
+      } else {
+        const { data: quoteData, error: quoteError } = await supabase.from("quotes").insert({
+          ...quotePayload,
+          created_by: userData.user?.id ?? null,
+        }).select("id").single();
+        if (quoteError) throw new Error(quoteError.message);
+        quoteId = quoteData.id;
+      }
+
+      if (items.length > 0 && quoteId) {
         const { error: itemsError } = await supabase.from("quote_items").insert(
           items.map(i => ({
-            quote_id: quoteData.id,
+            quote_id: quoteId,
             kind: i.kind,
             description: i.description,
             quantity: i.quantity,
@@ -1279,12 +1312,30 @@ function QuotesPanel({
       setItems([]);
       setDiscount("");
       setNotes("");
-      toast.success("Orçamento lançado.");
+      setEditingQuoteId(null);
+      toast.success(editingQuoteId ? "Orçamento atualizado." : "Orçamento lançado.");
       queryClient.invalidateQueries({ queryKey: ["quotes", serviceOrderId] });
       onChange();
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const handleEditQuote = (q: any) => {
+    setEditingQuoteId(q.id);
+    setNewPart({ description: "", quantity: 1, unit_price: "" });
+    setNewService({ description: "", quantity: 1, unit_price: "" });
+    setDiscount((q.parts_total + q.labor_total - q.total).toString());
+    setNotes(q.notes || "");
+    setItems((q.quote_items || []).map((i: any) => ({
+      id: crypto.randomUUID(),
+      kind: i.kind,
+      description: i.description,
+      quantity: i.quantity,
+      unit_price: Number(i.unit_price || 0),
+      total: Number(i.total || 0)
+    })));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const createPo = useMutation({
     mutationFn: async () => {
@@ -1317,12 +1368,12 @@ function QuotesPanel({
 
   return (
     <div className="space-y-3">
-      {printingQuoteId && (
-        <PrintableQuote osData={osData} quote={quotes.data?.find(q => q.id === printingQuoteId)} />
+      {printState && (
+        <PrintableQuote osData={osData} quote={quotes.data?.find(q => q.id === printState.id)} forceVisible={printState.action === "image"} />
       )}
 
       <div className="panel space-y-3 p-4">
-        <h2 className="font-display text-lg">Novo orçamento</h2>
+        <h2 className="font-display text-lg">{editingQuoteId ? "Editar Orçamento" : "Novo Orçamento"}</h2>
         
         <div className="grid gap-3 sm:grid-cols-2">
           {/* Peças Form */}
@@ -1437,14 +1488,26 @@ function QuotesPanel({
           onChange={(e) => setNotes(e.target.value)}
         />
         
-        <div className="flex justify-between items-center py-2 border-t">
+        <div className="flex justify-between items-center py-2 border-t gap-4">
           <div className="text-sm">
             <p className="text-muted-foreground">Peças: {brl(partsTotal)} | M.O: {brl(laborTotal)}</p>
             <p className="font-bold text-lg text-primary">Total: {brl(Math.max(0, partsTotal + laborTotal - Number(discount || 0)))}</p>
           </div>
-          <Button className="w-1/2" onClick={() => createQuote.mutate()} disabled={createQuote.isPending || items.length === 0}>
-            Lançar orçamento
-          </Button>
+          <div className="flex gap-2">
+            {editingQuoteId && (
+              <Button variant="outline" onClick={() => {
+                setEditingQuoteId(null);
+                setItems([]);
+                setDiscount("");
+                setNotes("");
+              }}>
+                Cancelar
+              </Button>
+            )}
+            <Button onClick={() => createQuote.mutate()} disabled={createQuote.isPending || items.length === 0}>
+              {editingQuoteId ? "Salvar Alterações" : "Lançar Orçamento"}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -1481,9 +1544,25 @@ function QuotesPanel({
                 variant="outline"
                 size="sm"
                 className="text-xs h-8 px-2"
-                onClick={() => setPrintingQuoteId(q.id)}
+                onClick={() => handleEditQuote(q)}
               >
-                <Printer className="size-3 mr-1.5" /> Imprimir
+                <Pencil className="size-3 mr-1.5" /> Editar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-8 px-2"
+                onClick={() => setPrintState({ id: q.id, action: "image" })}
+              >
+                <ImageIcon className="size-3 mr-1.5" /> Imagem
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-8 px-2"
+                onClick={() => setPrintState({ id: q.id, action: "pdf" })}
+              >
+                <Printer className="size-3 mr-1.5" /> PDF
               </Button>
             </div>
             <p className="font-display text-2xl leading-none text-primary">{brl(Number(q.total))}</p>

@@ -1,7 +1,7 @@
 import { brl } from "@/routes/_authenticated/painel";
 import hmLogo from "@/assets/hm-logo.png.asset.json";
 
-export function PrintableQuote({ osData, quote }: { osData: any; quote: any }) {
+export function PrintableQuote({ osData, quote, forceVisible = false }: { osData: any; quote: any; forceVisible?: boolean }) {
   if (!quote) return null;
 
   const dateNow = new Date();
@@ -13,7 +13,10 @@ export function PrintableQuote({ osData, quote }: { osData: any; quote: any }) {
   const labor = items.filter((i: any) => i.kind === "servico");
 
   return (
-    <div className="hidden print:block absolute top-0 left-0 right-0 bg-white z-[9999] text-black font-sans w-full min-h-screen p-8 text-sm box-border">
+    <div 
+      id="printable-quote"
+      className={`${forceVisible ? "block fixed top-[-9999px] left-[-9999px] w-[210mm]" : "hidden print:block w-full absolute top-0 left-0 right-0"} bg-white z-[9999] text-black font-sans min-h-[297mm] p-8 text-sm box-border`}
+    >
       <style>{`
         @media print {
           @page { 
