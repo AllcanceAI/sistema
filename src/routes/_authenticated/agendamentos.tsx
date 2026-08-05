@@ -134,6 +134,7 @@ function Agendamentos() {
         client_id: clientId,
         complaint: a.service || a.notes,
         created_by: userData.user?.id,
+        mode: "analise", // Fixed: missing required mode
       }).select("id").single();
 
       if (osErr) throw new Error("Erro ao criar OS: " + osErr.message);
