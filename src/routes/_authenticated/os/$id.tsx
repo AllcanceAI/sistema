@@ -228,6 +228,7 @@ function OsDetalhe() {
     );
   }
 
+  const isManagerOrOwner = hasRole(me, "dono") || hasRole(me, "gerente");
   const editable = can(me, "cadastrar_os") || os.mechanic_id === me?.userId;
   const approvalsList = approvals.data ?? [];
 
@@ -365,44 +366,48 @@ function OsDetalhe() {
 
         {editable ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Situação Manual</Label>
-              <Select
-                value={os.status}
-                onValueChange={(status) => updateOrder.mutate({ status })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_FLOW.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {OS_STATUS_LABELS[status]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Mecânico Responsável</Label>
-              <Select
-                value={os.mechanic_id ?? "none"}
-                onValueChange={(val) => updateOrder.mutate({ mechanic_id: val === "none" ? null : val })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Designar mecânico..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {(mechanics.data ?? []).map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {isManagerOrOwner && (
+              <>
+                <div className="space-y-2">
+                  <Label>Situação Manual</Label>
+                  <Select
+                    value={os.status}
+                    onValueChange={(status) => updateOrder.mutate({ status })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_FLOW.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {OS_STATUS_LABELS[status]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Mecânico Responsável</Label>
+                  <Select
+                    value={os.mechanic_id ?? "none"}
+                    onValueChange={(val) => updateOrder.mutate({ mechanic_id: val === "none" ? null : val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Designar mecânico..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {(mechanics.data ?? []).map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="prazo">Prazo de entrega</Label>
