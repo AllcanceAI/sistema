@@ -623,7 +623,7 @@ function OsDetalhe() {
         </TabsContent>
 
         <TabsContent value="orcamento" className="mt-3 space-y-3">
-          <QuotesPanel serviceOrderId={id} onChange={invalidate} />
+          <QuotesPanel serviceOrderId={id} osData={os} onChange={invalidate} />
           <MediaSection serviceOrderId={id} stage="outro" title="📷 Fotos e documentos do orçamento" />
         </TabsContent>
 
@@ -1152,14 +1152,16 @@ function toLocalInput(iso: string) {
 
 function QuotesPanel({
   serviceOrderId,
+  osData,
   onChange,
 }: {
   serviceOrderId: string;
+  osData?: any;
   onChange: () => void;
 }) {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
-  const visible = can(me, "ver_financeiro");
+  const visible = can(me, "ver_financeiro") || hasRole(me, "secretaria");
   const [quote, setQuote] = useState({ parts: "", labor: "", discount: "", paymentMethod: "dinheiro", notes: "" });
   const [po, setPo] = useState({ supplier: "", description: "", total: "" });
 
@@ -1324,16 +1326,43 @@ function QuotesPanel({
         </Button>
       </div>
 
-      {(quotes.data ?? []).map((q) => (
-        <div key={q.id} className="panel p-4 text-sm">
-          <p className="font-display text-2xl leading-none text-primary">{brl(Number(q.total))}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Peças {brl(Number(q.parts_total))} · Mão de obra {brl(Number(q.labor_total))} ·{" "}
-            {new Date(q.created_at).toLocaleDateString("pt-BR")}
-          </p>
-          {q.notes ? <p className="mt-2 whitespace-pre-wrap">{q.notes}</p> : null}
-        </div>
-      ))}
+      {(quotes.data ?? []).map((q) => {
+        const handleSendQuote = () => {
+          if (!osData) return;
+          const rawPhone = osData.clients?.phone ?? osData.companies?.phone ?? "";
+          let phone = rawPhone ? rawPhone.replace(/\D/g, "") : "";
+          if (phone.length === 11 && !phone.startsWith("55")) {
+            phone = "55" + phone;
+          }
+          const plate = osData.vehicles?.plate ? ` (Placa: ${osData.vehicles.plate})` : "";
+          const message = `Olá! Segue o orçamento para o veículo${plate}:\n\nPeças: ${brl(Number(q.parts_total))}\nMão de obra: ${brl(Number(q.labor_total))}\n*Total: ${brl(Number(q.total))}*\n\n${q.notes ? `Observações:\n${q.notes}` : ""}\n\nAguardo sua aprovação.`;
+          const whatsappUrl = phone 
+            ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`
+            : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+          window.open(whatsappUrl, "_blank");
+        };
+
+        return (
+          <div key={q.id} className="panel p-4 text-sm relative">
+            {osData && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="absolute top-4 right-4 text-xs h-8 px-2"
+                onClick={handleSendQuote}
+              >
+                <Send className="size-3 mr-1.5" /> Enviar Cliente
+              </Button>
+            )}
+            <p className="font-display text-2xl leading-none text-primary">{brl(Number(q.total))}</p>
+            <p className="mt-1 text-xs text-muted-foreground pr-32">
+              Peças {brl(Number(q.parts_total))} · Mão de obra {brl(Number(q.labor_total))} ·{" "}
+              {new Date(q.created_at).toLocaleDateString("pt-BR")}
+            </p>
+            {q.notes ? <p className="mt-2 whitespace-pre-wrap">{q.notes}</p> : null}
+          </div>
+        );
+      })}
 
       <div className="panel space-y-3 p-4">
         <h2 className="font-display text-lg">Pedido de compra de peças</h2>
@@ -1441,7 +1470,7 @@ function ApprovalsPanel({
     onError: (error: Error) => toast.error(error.message),
   });
 
-  const canRequest = can(me, "cadastrar_os");
+  const canRequest = can(me, "cadastrar_os") || hasRole(me, "secretaria");
 
   return (
     <div className="space-y-3">
