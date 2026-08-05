@@ -4,7 +4,7 @@ import { Download, Loader2, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import html2canvas from "html2canvas";
+import * as htmlToImage from "html-to-image";
 import { MediaSection } from "@/components/MediaSection";
 
 export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
@@ -60,13 +60,11 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
     if (!el) return;
     setDownloading(true);
     try {
-      // Use html2canvas to render the DOM node to an image
-      const canvas = await html2canvas(el, {
-        useCORS: true,
-        scale: 2,
+      // Use html-to-image to render the DOM node to an image (supports oklch CSS)
+      const dataUrl = await htmlToImage.toPng(el, {
         backgroundColor: "#ffffff",
+        pixelRatio: 2,
       });
-      const dataUrl = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.download = `Evidencias_OS_${order.data?.number ?? ""}_HM_Auto_Eletrica.png`;
       link.href = dataUrl;
