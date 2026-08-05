@@ -6,9 +6,13 @@ import { APP_ROLES } from "@/lib/roles";
 const roleEnum = z.enum(APP_ROLES);
 
 async function assertOwner(context: { supabase: any; userId: string }) {
-  // Bypass temporário: Como o banco foi limpo, permitimos a ação
-  // para que o cliente possa se cadastrar novamente.
-  return;
+  const { data, error } = await context.supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", context.userId)
+    .eq("role", "dono")
+    .maybeSingle();
+  if (error || !data) throw new Error("Apenas o dono pode executar esta ação.");
 }
 
 /** Cria o primeiro acesso (dono) quando ainda não existe nenhum usuário. */

@@ -31,7 +31,8 @@ export function MediaSection({
   excludeItemPhotos?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [description, setDescription] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null);
 
@@ -183,7 +184,7 @@ export function MediaSection({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => cameraInputRef.current?.click()}
           disabled={upload.isPending}
           className="gap-1.5 text-xs"
         >
@@ -192,13 +193,39 @@ export function MediaSection({
           ) : (
             <Camera className="size-3.5" />
           )}
-          Adicionar Fotos
+          Tirar Foto
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => galleryInputRef.current?.click()}
+          disabled={upload.isPending}
+          className="gap-1.5 text-xs"
+        >
+          {upload.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <ImagePlus className="size-3.5" />
+          )}
+          Galeria
         </Button>
       </div>
 
-      {/* Hidden input supporting camera, gallery and video in a single prompt */}
+      {/* Hidden input for Camera */}
       <input
-        ref={fileInputRef}
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*,video/*,image/heic,image/heif"
+        capture="environment"
+        multiple
+        className="hidden"
+        onChange={onPick}
+      />
+
+      {/* Hidden input for Gallery */}
+      <input
+        ref={galleryInputRef}
         type="file"
         accept="image/*,video/*,image/heic,image/heif"
         multiple
