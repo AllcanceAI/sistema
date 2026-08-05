@@ -25,6 +25,7 @@ export function ChecklistSection({
   serviceOrderId,
   kind,
   canEdit,
+  onComplete,
 }: {
   serviceOrderId: string;
   kind: "entrada" | "diagnostico";

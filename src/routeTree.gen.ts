@@ -15,6 +15,7 @@ import { Route as AuthenticatedAgendamentosRouteImport } from './routes/_authent
 import { Route as AuthenticatedAoVivoRouteImport } from './routes/_authenticated/ao-vivo'
 import { Route as AuthenticatedCadastrosRouteImport } from './routes/_authenticated/cadastros'
 import { Route as AuthenticatedFinanceiroRouteImport } from './routes/_authenticated/financeiro'
+import { Route as AuthenticatedNotasFiscaisRouteImport } from './routes/_authenticated/notas-fiscais'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
 import { Route as AuthenticatedImprimirIdRouteImport } from './routes/_authenticated/imprimir/$id'
@@ -52,6 +53,12 @@ const AuthenticatedFinanceiroRoute = AuthenticatedFinanceiroRouteImport.update({
   path: '/financeiro',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedNotasFiscaisRoute =
+  AuthenticatedNotasFiscaisRouteImport.update({
+    id: '/notas-fiscais',
+    path: '/notas-fiscais',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPainelRoute = AuthenticatedPainelRouteImport.update({
   id: '/painel',
   path: '/painel',
@@ -89,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/ao-vivo': typeof AuthenticatedAoVivoRoute
   '/cadastros': typeof AuthenticatedCadastrosRoute
   '/financeiro': typeof AuthenticatedFinanceiroRoute
+  '/notas-fiscais': typeof AuthenticatedNotasFiscaisRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/imprimir/$id': typeof AuthenticatedImprimirIdRoute
@@ -102,6 +110,7 @@ export interface FileRoutesByTo {
   '/ao-vivo': typeof AuthenticatedAoVivoRoute
   '/cadastros': typeof AuthenticatedCadastrosRoute
   '/financeiro': typeof AuthenticatedFinanceiroRoute
+  '/notas-fiscais': typeof AuthenticatedNotasFiscaisRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/imprimir/$id': typeof AuthenticatedImprimirIdRoute
@@ -117,6 +126,7 @@ export interface FileRoutesById {
   '/_authenticated/ao-vivo': typeof AuthenticatedAoVivoRoute
   '/_authenticated/cadastros': typeof AuthenticatedCadastrosRoute
   '/_authenticated/financeiro': typeof AuthenticatedFinanceiroRoute
+  '/_authenticated/notas-fiscais': typeof AuthenticatedNotasFiscaisRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
   '/_authenticated/imprimir/$id': typeof AuthenticatedImprimirIdRoute
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | '/ao-vivo'
     | '/cadastros'
     | '/financeiro'
+    | '/notas-fiscais'
     | '/painel'
     | '/usuarios'
     | '/imprimir/$id'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/ao-vivo'
     | '/cadastros'
     | '/financeiro'
+    | '/notas-fiscais'
     | '/painel'
     | '/usuarios'
     | '/imprimir/$id'
@@ -159,6 +171,7 @@ export interface FileRouteTypes {
     | '/_authenticated/ao-vivo'
     | '/_authenticated/cadastros'
     | '/_authenticated/financeiro'
+    | '/_authenticated/notas-fiscais'
     | '/_authenticated/painel'
     | '/_authenticated/usuarios'
     | '/_authenticated/imprimir/$id'
@@ -216,6 +229,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFinanceiroRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/notas-fiscais': {
+      id: '/_authenticated/notas-fiscais'
+      path: '/notas-fiscais'
+      fullPath: '/notas-fiscais'
+      preLoaderRoute: typeof AuthenticatedNotasFiscaisRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/painel': {
       id: '/_authenticated/painel'
       path: '/painel'
@@ -266,6 +286,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAoVivoRoute: typeof AuthenticatedAoVivoRoute
   AuthenticatedCadastrosRoute: typeof AuthenticatedCadastrosRoute
   AuthenticatedFinanceiroRoute: typeof AuthenticatedFinanceiroRoute
+  AuthenticatedNotasFiscaisRoute: typeof AuthenticatedNotasFiscaisRoute
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
   AuthenticatedUsuariosRoute: typeof AuthenticatedUsuariosRoute
   AuthenticatedImprimirIdRoute: typeof AuthenticatedImprimirIdRoute
@@ -279,6 +300,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAoVivoRoute: AuthenticatedAoVivoRoute,
   AuthenticatedCadastrosRoute: AuthenticatedCadastrosRoute,
   AuthenticatedFinanceiroRoute: AuthenticatedFinanceiroRoute,
+  AuthenticatedNotasFiscaisRoute: AuthenticatedNotasFiscaisRoute,
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
   AuthenticatedUsuariosRoute: AuthenticatedUsuariosRoute,
   AuthenticatedImprimirIdRoute: AuthenticatedImprimirIdRoute,
