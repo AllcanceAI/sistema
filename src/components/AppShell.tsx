@@ -41,10 +41,10 @@ export function AppShell({
     { to: "/ao-vivo", label: "Pista", icon: <Radio className="size-5" /> },
     { to: "/painel", label: "Painel", icon: <LayoutDashboard className="size-5" /> },
     { to: "/os", label: "Ordens", icon: <Wrench className="size-5" /> },
-    { to: "/cadastros", label: "Cadastros", icon: <ClipboardList className="size-5" /> },
   ];
   if (hasRole(me, "dono", "gerente", "secretaria")) {
-    items.splice(3, 0, { to: "/agendamentos", label: "Agenda", icon: <CalendarDays className="size-5" /> });
+    items.push({ to: "/cadastros", label: "Cadastros", icon: <ClipboardList className="size-5" /> });
+    items.push({ to: "/agendamentos", label: "Agenda", icon: <CalendarDays className="size-5" /> });
   }
   if (hasRole(me, "dono", "gerente", "contabilidade")) {
     items.push({ to: "/financeiro", label: "Caixa", icon: <Wallet className="size-5" /> });
