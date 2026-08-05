@@ -139,9 +139,12 @@ export function PrintableQuote({ osData, quote }: { osData: any; quote: any }) {
           Observações da oficina
         </div>
         <div className="p-2 text-[10px] text-justify text-gray-600 min-h-16">
-          {quote.notes || 
-            "Garantia de 90 (noventa) dias para peças e serviços executados, conforme previsto no Código de Defesa do Consumidor. A garantia cobre defeitos de fabricação das peças aplicadas e falhas decorrentes da execução do serviço realizado. Não estão cobertos danos causados por mau uso, acidentes, intervenções de terceiros, instalações inadequadas ou fatores externos que não estejam relacionados ao serviço prestado."
-          }
+          {quote.notes && (
+            <div className="mb-2 whitespace-pre-wrap">{quote.notes}</div>
+          )}
+          <div>
+            Garantia de 90 (noventa) dias para peças e serviços executados, conforme previsto no Código de Defesa do Consumidor. A garantia cobre defeitos de fabricação das peças aplicadas e falhas decorrentes da execução do serviço realizado. Não estão cobertos danos causados por mau uso, acidentes, intervenções de terceiros, instalações inadequadas ou fatores externos que não estejam relacionados ao serviço prestado.
+          </div>
         </div>
       </div>
 

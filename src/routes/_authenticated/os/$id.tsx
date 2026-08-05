@@ -1165,7 +1165,8 @@ function QuotesPanel({
   const visible = can(me, "ver_financeiro") || hasRole(me, "secretaria");
   
   const [items, setItems] = useState<{ id: string, kind: "peca" | "servico", description: string, quantity: number, unit_price: number, total: number }[]>([]);
-  const [newItem, setNewItem] = useState({ kind: "peca", description: "", quantity: 1, unit_price: "" });
+  const [newPart, setNewPart] = useState({ description: "", quantity: 1, unit_price: "" });
+  const [newService, setNewService] = useState({ description: "", quantity: 1, unit_price: "" });
   const [discount, setDiscount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("dinheiro");
   const [notes, setNotes] = useState("");
@@ -1210,26 +1211,22 @@ function QuotesPanel({
     },
   });
 
-  const handleAddItem = () => {
-    if (!newItem.description) {
-      toast.error("Informe a descrição do item");
-      return;
-    }
-    const up = Number(newItem.unit_price) || 0;
-    const qty = Number(newItem.quantity) || 1;
-    if (up <= 0) {
-      toast.error("Informe um preço válido");
-      return;
-    }
-    setItems([...items, {
-      id: crypto.randomUUID(),
-      kind: newItem.kind as "peca" | "servico",
-      description: newItem.description.trim(),
-      quantity: qty,
-      unit_price: up,
-      total: up * qty
-    }]);
-    setNewItem({ kind: "peca", description: "", quantity: 1, unit_price: "" });
+  const handleAddPart = () => {
+    if (!newPart.description) return toast.error("Informe a descrição da peça");
+    const up = Number(newPart.unit_price) || 0;
+    const qty = Number(newPart.quantity) || 1;
+    if (up <= 0) return toast.error("Informe um preço válido");
+    setItems([...items, { id: crypto.randomUUID(), kind: "peca", description: newPart.description.trim(), quantity: qty, unit_price: up, total: up * qty }]);
+    setNewPart({ description: "", quantity: 1, unit_price: "" });
+  };
+
+  const handleAddService = () => {
+    if (!newService.description) return toast.error("Informe a descrição do serviço");
+    const up = Number(newService.unit_price) || 0;
+    const qty = Number(newService.quantity) || 1;
+    if (up <= 0) return toast.error("Informe um preço válido");
+    setItems([...items, { id: crypto.randomUUID(), kind: "servico", description: newService.description.trim(), quantity: qty, unit_price: up, total: up * qty }]);
+    setNewService({ description: "", quantity: 1, unit_price: "" });
   };
 
   const removeItem = (id: string) => {
@@ -1327,32 +1324,49 @@ function QuotesPanel({
       <div className="panel space-y-3 p-4">
         <h2 className="font-display text-lg">Novo orçamento</h2>
         
-        <div className="bg-slate-50 p-3 rounded-md border space-y-2">
-          <div className="flex gap-2">
-            <Select value={newItem.kind} onValueChange={(v) => setNewItem({ ...newItem, kind: v })}>
-              <SelectTrigger className="w-[120px] bg-white"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="peca">Peça</SelectItem>
-                <SelectItem value="servico">Serviço</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {/* Peças Form */}
+          <div className="bg-blue-50/50 p-3 rounded-md border space-y-2">
+            <h3 className="font-semibold text-sm text-blue-800">Adicionar Peça</h3>
             <Input 
-              placeholder="Descrição do item" 
-              className="flex-1 bg-white"
-              value={newItem.description}
-              onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+              placeholder="Descrição da peça" 
+              className="bg-white"
+              value={newPart.description}
+              onChange={(e) => setNewPart({ ...newPart, description: e.target.value })}
             />
+            <div className="flex gap-2 items-end">
+              <div className="w-[80px]">
+                <Label className="text-[10px]">Qtd</Label>
+                <Input type="number" min="1" className="bg-white" value={newPart.quantity} onChange={(e) => setNewPart({ ...newPart, quantity: e.target.value })} />
+              </div>
+              <div className="flex-1">
+                <Label className="text-[10px]">Preço Unitário (R$)</Label>
+                <Input type="number" step="0.01" className="bg-white" value={newPart.unit_price} onChange={(e) => setNewPart({ ...newPart, unit_price: e.target.value })} />
+              </div>
+              <Button type="button" variant="secondary" onClick={handleAddPart}>+ Peça</Button>
+            </div>
           </div>
-          <div className="flex gap-2 items-end">
-            <div className="w-[80px]">
-              <Label className="text-[10px]">Qtd</Label>
-              <Input type="number" min="1" className="bg-white" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} />
+
+          {/* Serviços Form */}
+          <div className="bg-green-50/50 p-3 rounded-md border space-y-2">
+            <h3 className="font-semibold text-sm text-green-800">Adicionar Serviço</h3>
+            <Input 
+              placeholder="Descrição do serviço" 
+              className="bg-white"
+              value={newService.description}
+              onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+            />
+            <div className="flex gap-2 items-end">
+              <div className="w-[80px]">
+                <Label className="text-[10px]">Qtd</Label>
+                <Input type="number" min="1" className="bg-white" value={newService.quantity} onChange={(e) => setNewService({ ...newService, quantity: e.target.value })} />
+              </div>
+              <div className="flex-1">
+                <Label className="text-[10px]">Preço Unitário (R$)</Label>
+                <Input type="number" step="0.01" className="bg-white" value={newService.unit_price} onChange={(e) => setNewService({ ...newService, unit_price: e.target.value })} />
+              </div>
+              <Button type="button" variant="secondary" onClick={handleAddService}>+ Serviço</Button>
             </div>
-            <div className="flex-1">
-              <Label className="text-[10px]">Preço Unitário (R$)</Label>
-              <Input type="number" step="0.01" className="bg-white" value={newItem.unit_price} onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })} />
-            </div>
-            <Button type="button" variant="secondary" onClick={handleAddItem}>Adicionar</Button>
           </div>
         </div>
 
