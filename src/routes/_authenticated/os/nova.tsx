@@ -72,22 +72,50 @@ function NovaOs() {
     birthDate: "",
   });
 
-  const [cpfError, setCpfError] = useState("");
+  const [docError, setDocError] = useState("");
 
-  const validateCPF = (cpf: string) => {
-    cpf = cpf.replace(/[^\d]+/g, "");
-    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
-    let sum = 0, rest;
-    for (let i = 1; i <= 9; i++) sum = sum + parseInt(cpf.substring(i - 1, i)) * (11 - i);
-    rest = (sum * 10) % 11;
-    if (rest === 10 || rest === 11) rest = 0;
-    if (rest !== parseInt(cpf.substring(9, 10))) return false;
-    sum = 0;
-    for (let i = 1; i <= 10; i++) sum = sum + parseInt(cpf.substring(i - 1, i)) * (12 - i);
-    rest = (sum * 10) % 11;
-    if (rest === 10 || rest === 11) rest = 0;
-    if (rest !== parseInt(cpf.substring(10, 11))) return false;
-    return true;
+  const validateDocument = (doc: string) => {
+    const raw = doc.replace(/[^\d]+/g, "");
+    if (raw.length === 11) {
+      if (/^(\d)\1+$/.test(raw)) return false;
+      let sum = 0, rest;
+      for (let i = 1; i <= 9; i++) sum = sum + parseInt(raw.substring(i - 1, i)) * (11 - i);
+      rest = (sum * 10) % 11;
+      if (rest === 10 || rest === 11) rest = 0;
+      if (rest !== parseInt(raw.substring(9, 10))) return false;
+      sum = 0;
+      for (let i = 1; i <= 10; i++) sum = sum + parseInt(raw.substring(i - 1, i)) * (12 - i);
+      rest = (sum * 10) % 11;
+      if (rest === 10 || rest === 11) rest = 0;
+      if (rest !== parseInt(raw.substring(10, 11))) return false;
+      return true;
+    }
+    if (raw.length === 14) {
+      if (/^(\d)\1+$/.test(raw)) return false;
+      let size = raw.length - 2;
+      let numbers = raw.substring(0, size);
+      let digits = raw.substring(size);
+      let sum = 0;
+      let pos = size - 7;
+      for (let i = size; i >= 1; i--) {
+        sum += parseInt(numbers.charAt(size - i)) * pos--;
+        if (pos < 2) pos = 9;
+      }
+      let result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+      if (result !== parseInt(digits.charAt(0))) return false;
+      size = size + 1;
+      numbers = raw.substring(0, size);
+      sum = 0;
+      pos = size - 7;
+      for (let i = size; i >= 1; i--) {
+        sum += parseInt(numbers.charAt(size - i)) * pos--;
+        if (pos < 2) pos = 9;
+      }
+      result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+      if (result !== parseInt(digits.charAt(1))) return false;
+      return true;
+    }
+    return false;
   };
 
   const runLookup = useServerFn(lookupPlate);
@@ -246,8 +274,8 @@ function NovaOs() {
             toast.error("Informe a placa do veículo.");
             return;
           }
-          if (form.cpf && !validateCPF(form.cpf)) {
-            setCpfError("CPF inválido ou inexistente");
+          if (form.cpf && !validateDocument(form.cpf)) {
+            setDocError("CPF ou CNPJ inválido");
             return;
           }
           save.mutate();
@@ -287,18 +315,18 @@ function NovaOs() {
             <Field label="Telefone" value={form.phone} onChange={(v) => set("phone", v)} type="tel" />
             <Field label="E-mail" value={form.email} onChange={(v) => set("email", v)} type="email" />
             <div className="space-y-2">
-              <Label htmlFor="cpf" className={cpfError ? "text-red-500" : ""}>CPF</Label>
+              <Label htmlFor="cpf" className={docError ? "text-red-500" : ""}>CPF / CNPJ</Label>
               <Input
                 id="cpf"
                 value={form.cpf}
                 onChange={(e) => {
                   set("cpf", e.target.value);
-                  setCpfError("");
+                  setDocError("");
                 }}
-                className={cpfError ? "border-red-500 focus-visible:ring-red-500" : ""}
-                placeholder="000.000.000-00"
+                className={docError ? "border-red-500 focus-visible:ring-red-500" : ""}
+                placeholder="Apenas números..."
               />
-              {cpfError && <p className="text-xs text-red-500">{cpfError}</p>}
+              {docError && <p className="text-xs text-red-500">{docError}</p>}
             </div>
             <Field label="Data de Nascimento" value={form.birthDate} onChange={(v) => set("birthDate", v)} type="date" />
           </div>
