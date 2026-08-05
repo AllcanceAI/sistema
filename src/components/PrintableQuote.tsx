@@ -1,4 +1,5 @@
 import { brl } from "@/routes/_authenticated/painel";
+import hmLogo from "@/assets/hm-logo.png.asset.json";
 
 export function PrintableQuote({ osData, quote }: { osData: any; quote: any }) {
   if (!quote) return null;
@@ -12,7 +13,20 @@ export function PrintableQuote({ osData, quote }: { osData: any; quote: any }) {
   const labor = items.filter((i: any) => i.kind === "servico");
 
   return (
-    <div className="hidden print:block absolute inset-0 bg-white z-[9999] text-black font-sans w-full h-full p-8 text-sm">
+    <div className="hidden print:block absolute top-0 left-0 right-0 bg-white z-[9999] text-black font-sans w-full min-h-screen p-8 text-sm box-border">
+      <style>{`
+        @media print {
+          @page { 
+            margin: 0;
+            size: A4;
+          }
+          body { 
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+      `}</style>
+
       {/* HEADER */}
       <div className="flex justify-between items-start mb-6 border-b-2 border-gray-400 pb-4">
         <div className="text-xs text-gray-500 w-1/4">
@@ -24,10 +38,7 @@ export function PrintableQuote({ osData, quote }: { osData: any; quote: any }) {
           <p className="text-xs">CNPJ: 66.473.569/0001-82 - Cel.: +55 (15) 99682-5445</p>
         </div>
         <div className="w-1/4 flex justify-end">
-          <div className="w-32 h-16 bg-black flex items-center justify-center text-white text-xs font-bold italic">
-            {/* Fallback text if logo image is missing */}
-            HM
-          </div>
+          <img src={hmLogo.url} alt="HM Auto Elétrica" className="w-32 object-contain" />
         </div>
       </div>
 
