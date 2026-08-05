@@ -45,15 +45,12 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
       if (error) throw new Error(error.message);
 
       const rows = data ?? [];
-      const signed = await Promise.all(
-        rows.map(async (row) => {
-          const { data: url } = await supabase.storage
-            .from("oficina-media")
-            .createSignedUrl(row.storage_path, 3600);
-          return { ...row, url: url?.signedUrl ?? "" };
-        }),
-      );
-      return signed;
+      return rows.map((row) => {
+        const { data: urlData } = supabase.storage
+          .from("oficina-media")
+          .getPublicUrl(row.storage_path);
+        return { ...row, url: urlData.publicUrl };
+      });
     },
   });
 

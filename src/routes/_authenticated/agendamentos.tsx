@@ -1,9 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   CalendarDays, ChevronLeft, ChevronRight, Plus, Car, User, Clock,
-  Loader2, X, MessageCircle, Check, CalendarRange, CheckCircle
+  Loader2, X, MessageCircle, Check, CalendarRange, CheckCircle, FileText
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -51,6 +51,7 @@ const STATUS_BADGES: Record<string, { label: string; style: string }> = {
 
 function Agendamentos() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-indexed
@@ -100,6 +101,49 @@ function Agendamentos() {
       queryClient.invalidateQueries({ queryKey: ["appointments"] });
       setShowModal(false);
       setForm({ client_name: "", plate: "", service: "", scheduled_at: "", notes: "" });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const startOS = useMutation({
+    mutationFn: async (a: Appointment) => {
+      const plate = a.plate?.trim() || `S/P-${Math.floor(Math.random() * 9999)}`;
+      const { data: userData } = await supabase.auth.getUser();
+
+      let clientId: string | undefined;
+      if (a.client_name) {
+        const { data: clientSearch } = await supabase.from("clients").select("id").ilike("name", a.client_name).limit(1).maybeSingle();
+        if (clientSearch) clientId = clientSearch.id;
+        else {
+          const { data: newClient } = await supabase.from("clients").insert({ name: a.client_name }).select("id").single();
+          if (newClient) clientId = newClient.id;
+        }
+      }
+
+      let vehicleId: string;
+      const { data: vehicleSearch } = await supabase.from("vehicles").select("id").eq("plate", plate.toUpperCase()).limit(1).maybeSingle();
+      if (vehicleSearch) vehicleId = vehicleSearch.id;
+      else {
+        const { data: newVehicle, error: vErr } = await supabase.from("vehicles").insert({ plate: plate.toUpperCase(), client_id: clientId }).select("id").single();
+        if (vErr) throw new Error("Erro ao criar veículo: " + vErr.message);
+        vehicleId = newVehicle.id;
+      }
+
+      const { data: newOs, error: osErr } = await supabase.from("service_orders").insert({
+        vehicle_id: vehicleId,
+        client_id: clientId,
+        complaint: a.service || a.notes,
+        created_by: userData.user?.id,
+      }).select("id").single();
+
+      if (osErr) throw new Error("Erro ao criar OS: " + osErr.message);
+
+      await supabase.from("appointments").update({ status: "compareceu" }).eq("id", a.id);
+      return newOs.id;
+    },
+    onSuccess: (osId) => {
+      toast.success("Ordem de Serviço iniciada!");
+      navigate({ to: "/os/$id", params: { id: osId } });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -298,6 +342,10 @@ function Agendamentos() {
                     </Button>
 
                     {/* Status selection actions */}
+                    <Button size="sm" variant="default" className="gap-1 bg-primary text-primary-foreground" onClick={() => startOS.mutate(a)} disabled={startOS.isPending}>
+                      {startOS.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />} Abrir OS
+                    </Button>
+
                     {a.status !== "confirmado" && (
                       <Button size="sm" variant="outline" className="gap-1 text-green-700 border-green-400 bg-green-500/5 hover:bg-green-500/10" onClick={() => updateAppointmentStatus.mutate({ id: a.id, status: "confirmado" })}>
                         <Check className="size-3.5" /> Confirmou
@@ -373,6 +421,10 @@ function Agendamentos() {
                   {a.service && <p className="text-xs text-muted-foreground">{a.service}</p>}
                 </div>
                 <div className="flex flex-wrap gap-1 mt-2 md:mt-0">
+                  <Button size="sm" variant="default" className="bg-primary text-primary-foreground gap-1" onClick={() => startOS.mutate(a)} disabled={startOS.isPending} title="Iniciar OS">
+                    {startOS.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />} Abrir OS
+                  </Button>
+
                   <Button size="sm" variant="outline" className="text-green-600" onClick={() => whatsapp(a)}>
                     <MessageCircle className="size-3.5" />
                   </Button>

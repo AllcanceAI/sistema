@@ -1,20 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ListChecks, Camera, X, Image, Trash2 } from "lucide-react";
-import { useRef, useState, useEffect } from "react";
+import { Loader2, ListChecks, Camera, Trash2, ImagePlus } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { CHECKLIST_ENTRADA, CHECKLIST_DIAGNOSTICO, CHECK_STATE_LABELS } from "@/lib/checklist-templates";
+import {
+  CHECKLIST_ENTRADA,
+  CHECKLIST_DIAGNOSTICO,
+  CHECK_STATE_LABELS,
+} from "@/lib/checklist-templates";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MediaSection } from "@/components/MediaSection";
 
 const STATES = ["ok", "atencao", "critico", "na"] as const;
 
-type ItemPhoto = {
-  itemId: string;
+type ItemMedia = {
+  id: string;
   url: string;
   path: string;
-  mediaId: string;
+  itemId: string;
 };
 
 export function ChecklistSection({
@@ -27,14 +31,12 @@ export function ChecklistSection({
   canEdit: boolean;
 }) {
   const queryClient = useQueryClient();
-  const key = ["checklist", serviceOrderId, kind];
+  const CHECKLIST_KEY = ["checklist", serviceOrderId, kind];
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
-  const [itemPhotos, setItemPhotos] = useState<ItemPhoto[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeItemId, setActiveItemId] = useState<string | null>(null);
 
+  // ── Fetch checklist + items ────────────────────────────────────────────────
   const checklist = useQuery({
-    queryKey: key,
+    queryKey: CHECKLIST_KEY,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("checklists")
@@ -47,82 +49,87 @@ export function ChecklistSection({
     },
   });
 
-  // Fetch photos linked to this checklist
-  const photosQuery = useQuery({
-    queryKey: ["checklist-photos", serviceOrderId, kind, checklist.data?.id],
+  // ── Fetch per-item photos (all media linked to this checklist) ─────────────
+  const PHOTOS_KEY = ["checklist-item-photos", serviceOrderId, kind];
+  const itemPhotos = useQuery({
+    queryKey: PHOTOS_KEY,
     enabled: !!checklist.data?.id,
+    staleTime: 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("media")
-        .select("id, storage_path, description, checklist_id")
+        .select("id, storage_path, description, checklist_id, mime_type")
         .eq("service_order_id", serviceOrderId)
         .eq("checklist_id", checklist.data!.id);
       if (error) throw new Error(error.message);
 
-      const items = await Promise.all(
-        (data ?? []).map(async (row) => {
-          const { data: urlData } = await supabase.storage
-            .from("oficina-media")
-            .createSignedUrl(row.storage_path, 3600);
-          
-          // Extrapolate item ID from storage path (was stored as: {serviceOrderId}/checklist/{itemId}/{timestamp}.ext)
-          const parts = row.storage_path.split("/");
-          const itemId = parts[2] || ""; // third index contains the itemId
-
-          return {
-            itemId,
-            url: urlData?.signedUrl ?? "",
-            path: row.storage_path,
-            mediaId: row.id,
-          };
-        })
-      );
-      return items;
+      const rows = data ?? [];
+      return rows.map((row) => {
+        const { data: urlData } = supabase.storage
+          .from("oficina-media")
+          .getPublicUrl(row.storage_path);
+        const parts = row.storage_path.split("/");
+        const itemId = parts[2] ?? "";
+        return {
+          id: row.id,
+          url: urlData.publicUrl,
+          path: row.storage_path,
+          itemId,
+        } as ItemMedia;
+      });
     },
   });
 
-  useEffect(() => {
-    if (photosQuery.data) {
-      setItemPhotos(photosQuery.data);
-    }
-  }, [photosQuery.data]);
-
+  // ── Create checklist ───────────────────────────────────────────────────────
   const create = useMutation({
     mutationFn: async () => {
       const { data: userData } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("checklists")
-        .insert({ service_order_id: serviceOrderId, kind, created_by: userData.user?.id ?? null })
+        .insert({
+          service_order_id: serviceOrderId,
+          kind,
+          created_by: userData.user?.id ?? null,
+        })
         .select("id")
         .single();
       if (error) throw new Error(error.message);
 
-      const template = kind === "entrada" ? CHECKLIST_ENTRADA : CHECKLIST_DIAGNOSTICO;
-      const { error: itemsError } = await supabase.from("checklist_items").insert(
-        template.map((item, index) => ({
-          checklist_id: data.id,
-          label: item.label,
-          position: index,
-        })),
-      );
+      const template =
+        kind === "entrada" ? CHECKLIST_ENTRADA : CHECKLIST_DIAGNOSTICO;
+      const { error: itemsError } = await supabase
+        .from("checklist_items")
+        .insert(
+          template.map((item, index) => ({
+            checklist_id: data.id,
+            label: item.label,
+            position: index,
+          })),
+        );
       if (itemsError) throw new Error(itemsError.message);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CHECKLIST_KEY }),
     onError: (error: Error) => toast.error(error.message),
   });
 
+  // ── Update individual item (state / note) ─────────────────────────────────
   const updateItem = useMutation({
     mutationFn: async (input: { id: string; state?: string; note?: string }) => {
-      const patch: { state?: never; note?: string } = {};
-      if (input.state) patch.state = input.state as never;
+      const patch: Record<string, unknown> = {};
+      if (input.state !== undefined) patch.state = input.state;
       if (input.note !== undefined) patch.note = input.note;
-      const { error } = await supabase.from("checklist_items").update(patch).eq("id", input.id);
+      const { error } = await supabase
+        .from("checklist_items")
+        .update(patch as never)
+        .eq("id", input.id);
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: CHECKLIST_KEY }),
     onError: (error: Error) => toast.error(error.message),
   });
 
+  // ── Update notes ──────────────────────────────────────────────────────────
   const updateNotes = useMutation({
     mutationFn: async (notes: string) => {
       const { error } = await supabase
@@ -135,44 +142,63 @@ export function ChecklistSection({
     onError: (error: Error) => toast.error(error.message),
   });
 
-  async function handlePhotoUpload(itemId: string, file: File) {
+  // ── Upload photo for a specific checklist item ────────────────────────────
+  async function handleItemPhotoUpload(itemId: string, filesInput: FileList | File[]) {
+    const files = Array.from(filesInput);
+    if (!files.length || !checklist.data?.id) return;
     setUploadingItemId(itemId);
+    const itemLabel = items.find((i) => i.id === itemId)?.label ?? "Item";
+    const uploaded: ItemMedia[] = [];
+
     try {
       const { data: userData } = await supabase.auth.getUser();
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${serviceOrderId}/checklist/${itemId}/${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("oficina-media")
-        .upload(path, file, { upsert: false });
-      if (uploadError) throw new Error(uploadError.message);
+      for (const file of files) {
+        const ext = file.name.split(".").pop() || "jpg";
+        const path = `${serviceOrderId}/checklist/${itemId}/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+        const mimeType = file.type || "image/jpeg";
 
-      const { data: urlData } = await supabase.storage
-        .from("oficina-media")
-        .createSignedUrl(path, 3600);
+        const { error: upErr } = await supabase.storage
+          .from("oficina-media")
+          .upload(path, file, { contentType: mimeType });
+        if (upErr) throw new Error(upErr.message);
 
-      // Save reference in media table
-      const { data: mediaData, error: dbError } = await supabase
-        .from("media")
-        .insert({
-          service_order_id: serviceOrderId,
-          checklist_id: checklist.data?.id ?? null,
-          stage: kind === "entrada" ? "entrada" : "checklist",
-          storage_path: path,
-          mime_type: file.type,
-          description: `Foto do item: ${items.find(i => i.id === itemId)?.label ?? itemId}`,
-          created_by: userData.user?.id ?? null,
-        })
-        .select("id")
-        .single();
-      
-      if (dbError) throw new Error(dbError.message);
+        const { data: inserted, error: dbErr } = await supabase
+          .from("media")
+          .insert({
+            service_order_id: serviceOrderId,
+            checklist_id: checklist.data.id,
+            stage: (kind === "entrada" ? "entrada" : "checklist") as never,
+            storage_path: path,
+            mime_type: mimeType,
+            description: `📷 ${itemLabel}`,
+            created_by: userData.user?.id ?? null,
+          })
+          .select("id")
+          .single();
+        if (dbErr) throw new Error(dbErr.message);
 
-      setItemPhotos((prev) => [
-        ...prev, 
-        { itemId, url: urlData?.signedUrl ?? "", path, mediaId: mediaData.id }
+        const { data: urlData } = supabase.storage
+          .from("oficina-media")
+          .getPublicUrl(path);
+
+        uploaded.push({
+          id: inserted.id,
+          url: urlData.publicUrl,
+          path,
+          itemId,
+        });
+      }
+
+      // Optimistic: add to per-item photos cache immediately
+      queryClient.setQueryData<ItemMedia[]>(PHOTOS_KEY, (old) => [
+        ...(old ?? []),
+        ...uploaded,
       ]);
+      queryClient.invalidateQueries({ queryKey: PHOTOS_KEY });
 
-      toast.success("Foto adicionada!");
+      toast.success(
+        `${uploaded.length} foto${uploaded.length > 1 ? "s" : ""} adicionada${uploaded.length > 1 ? "s" : ""}!`,
+      );
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -180,21 +206,33 @@ export function ChecklistSection({
     }
   }
 
-  const deletePhoto = useMutation({
-    mutationFn: async (photo: ItemPhoto) => {
-      await supabase.storage.from("oficina-media").remove([photo.path]);
-      const { error } = await supabase.from("media").delete().eq("id", photo.mediaId);
+  // ── Delete per-item photo ─────────────────────────────────────────────────
+  const deleteItemPhoto = useMutation({
+    mutationFn: async (photo: ItemMedia) => {
+      await supabase.storage
+        .from("oficina-media")
+        .remove([photo.path]);
+      const { error } = await supabase
+        .from("media")
+        .delete()
+        .eq("id", photo.id);
       if (error) throw new Error(error.message);
+      return photo.id;
     },
-    onSuccess: (_, photo) => {
-      setItemPhotos((prev) => prev.filter((p) => p.path !== photo.path));
-      toast.success("Foto removida!");
+    onSuccess: (deletedId) => {
+      queryClient.setQueryData<ItemMedia[]>(PHOTOS_KEY, (old) =>
+        (old ?? []).filter((p) => p.id !== deletedId),
+      );
+      toast.success("Foto removida.");
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // ── Guards ────────────────────────────────────────────────────────────────
   if (checklist.isLoading) {
-    return <Loader2 className="mx-auto my-6 size-5 animate-spin text-muted-foreground" />;
+    return (
+      <Loader2 className="mx-auto my-6 size-5 animate-spin text-muted-foreground" />
+    );
   }
 
   if (!checklist.data) {
@@ -207,8 +245,14 @@ export function ChecklistSection({
             : "Checklist de diagnóstico ainda não iniciado."}
         </p>
         {canEdit ? (
-          <Button className="mt-3" onClick={() => create.mutate()} disabled={create.isPending}>
-            {create.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+          <Button
+            className="mt-3"
+            onClick={() => create.mutate()}
+            disabled={create.isPending}
+          >
+            {create.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : null}
             Iniciar checklist
           </Button>
         ) : null}
@@ -219,15 +263,22 @@ export function ChecklistSection({
   const items = [...(checklist.data.checklist_items ?? [])].sort(
     (a, b) => a.position - b.position,
   );
+  const photosData = itemPhotos.data ?? [];
 
   return (
     <div className="space-y-3">
+      {/* ── Per-item checklist ──────────────────────────────────────────────── */}
       <div className="panel divide-y">
         {items.map((item) => {
-          const photos = itemPhotos.filter((p) => p.itemId === item.id);
+          const photos = photosData.filter((p) => p.itemId === item.id);
+          const isUploading = uploadingItemId === item.id;
+
           return (
             <div key={item.id} className="p-3">
+              {/* Item label */}
               <p className="text-sm font-medium">{item.label}</p>
+
+              {/* State buttons */}
               <div className="mt-2 grid grid-cols-4 gap-1.5">
                 {STATES.map((state) => (
                   <Button
@@ -243,66 +294,65 @@ export function ChecklistSection({
                 ))}
               </div>
 
-              {/* Photo upload per item */}
-              <div className="mt-2">
-                {canEdit && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 text-xs"
-                    disabled={uploadingItemId === item.id}
-                    onClick={() => {
-                      setActiveItemId(item.id);
-                      const input = document.createElement("input");
-                      input.type = "file";
-                      input.accept = "image/*";
-                      input.multiple = true;
-                      input.onchange = (e) => {
-                        const files = (e.target as HTMLInputElement).files;
-                        if (files) {
-                          Array.from(files).forEach((file) => handlePhotoUpload(item.id, file));
-                        }
-                      };
-                      input.click();
-                    }}
-                  >
-                    {uploadingItemId === item.id ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Camera className="size-3.5" />
-                    )}
-                    {uploadingItemId === item.id ? "Enviando..." : "Adicionar Fotos"}
-                  </Button>
-                )}
+              {/* Photo upload button — always visible, canEdit controls whether it shows */}
+              {canEdit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 gap-1.5 text-xs"
+                  disabled={isUploading}
+                  onClick={() => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = "image/*";
+                    input.multiple = true;
+                    input.onchange = (e) => {
+                      const files = (e.target as HTMLInputElement).files;
+                      if (files) handleItemPhotoUpload(item.id, files);
+                    };
+                    input.click();
+                  }}
+                >
+                  {isUploading ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Camera className="size-3.5" />
+                  )}
+                  {isUploading ? "Enviando..." : "Adicionar fotos"}
+                </Button>
+              )}
 
-                {/* Show uploaded photos for this item */}
-                {photos.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {photos.map((p) => (
-                      <div key={p.path} className="relative group border rounded-md overflow-hidden">
-                        <img
-                          src={p.url}
-                          alt="Foto do item"
-                          className="size-16 object-cover cursor-pointer hover:opacity-90"
-                          onClick={() => window.open(p.url, "_blank")}
-                        />
-                        {canEdit && (
-                          <button
-                            type="button"
-                            className="absolute right-0.5 top-0.5 rounded bg-red-600 p-1 text-white hover:bg-red-700 opacity-90 transition-opacity"
-                            onClick={() => deletePhoto.mutate(p)}
-                            title="Excluir"
-                          >
-                            <Trash2 className="size-3" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* Photos grid — always visible for viewing */}
+              {photos.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {photos.map((p) => (
+                    <div
+                      key={p.id}
+                      className="group relative h-16 w-16 overflow-hidden rounded-md border"
+                    >
+                      <img
+                        src={p.url}
+                        alt="Foto do item"
+                        className="h-full w-full cursor-zoom-in object-cover"
+                        onClick={() => window.open(p.url, "_blank")}
+                      />
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className="absolute right-0.5 top-0.5 rounded bg-red-600 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          onClick={() => deleteItemPhoto.mutate(p)}
+                          title="Excluir foto"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
+              {/* Note */}
               {canEdit ? (
                 <Textarea
                   className="mt-2 min-h-9"
@@ -322,6 +372,7 @@ export function ChecklistSection({
         })}
       </div>
 
+      {/* ── General notes ──────────────────────────────────────────────────── */}
       <div className="panel p-4">
         <h3 className="font-display text-lg">
           {kind === "entrada" ? "Observações da entrada" : "Análise do problema"}
@@ -340,11 +391,17 @@ export function ChecklistSection({
         />
       </div>
 
+      {/* ── General photo section (always visible, always uploadable) ────────── */}
       <MediaSection
         serviceOrderId={serviceOrderId}
         checklistId={checklist.data.id}
         stage={kind === "entrada" ? "entrada" : "checklist"}
-        title={kind === "entrada" ? "Fotos do veículo na entrada" : "Fotos do diagnóstico"}
+        title={
+          kind === "entrada"
+            ? "📷 Fotos gerais do veículo na entrada"
+            : "📷 Fotos do diagnóstico / defeito"
+        }
+        excludeItemPhotos
       />
     </div>
   );

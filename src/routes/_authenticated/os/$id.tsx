@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Send, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,6 +74,16 @@ function OsDetalhe() {
   const [editRequestModal, setEditRequestModal] = useState<{ stage: string; label: string } | null>(null);
   const [editReason, setEditReason] = useState("");
   const [editRequestSent, setEditRequestSent] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("entrada");
+
+  // Keep tab in sync with workflow progression
+  useEffect(() => {
+    if (activeStepIndex === 0) setActiveTab("entrada");
+    else if (activeStepIndex === 1) setActiveTab("diagnostico");
+    else if (activeStepIndex === 2 || activeStepIndex === 3) setActiveTab("orcamento");
+    else if (activeStepIndex === 4 || activeStepIndex === 5) setActiveTab("aprovacoes");
+    else if (activeStepIndex >= 6) setActiveTab("execucao");
+  }, [activeStepIndex]);
 
   const order = useQuery({
     queryKey: ["order", id],
@@ -396,7 +406,7 @@ function OsDetalhe() {
       </section>
 
       {/* Details tabs */}
-      <Tabs defaultValue={activeStepIndex <= 1 ? "entrada" : activeStepIndex === 2 || activeStepIndex === 3 ? "orcamento" : activeStepIndex >= 6 ? "execucao" : "entrada"} className="mt-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
         <TabsList className="grid w-full grid-cols-3 md:w-auto md:grid-cols-7">
           <TabsTrigger value="entrada">Entrada</TabsTrigger>
           <TabsTrigger value="diagnostico">Laudo</TabsTrigger>
@@ -426,6 +436,12 @@ function OsDetalhe() {
             </div>
           )}
           <ChecklistSection serviceOrderId={id} kind="entrada" canEdit={editable && activeStepIndex === 0} />
+          {/* Fotos gerais de entrada — sempre disponível mesmo após etapa trancada */}
+          <MediaSection
+            serviceOrderId={id}
+            stage="entrada"
+            title="📷 Fotos gerais do veículo (Entrada)"
+          />
         </TabsContent>
 
         <TabsContent value="diagnostico" className="mt-3 space-y-3">
@@ -479,13 +495,13 @@ function OsDetalhe() {
           <MediaSection
             serviceOrderId={id}
             stage="defeito"
-            title="Foto / vídeo do problema encontrado"
+            title="📷 Fotos do defeito / problema encontrado"
           />
         </TabsContent>
 
         <TabsContent value="execucao" className="mt-3 space-y-3">
-          <MediaSection serviceOrderId={id} stage="peca_nova" title="Peças novas instaladas" />
-          <MediaSection serviceOrderId={id} stage="servico_concluido" title="Serviço realizado" />
+          <MediaSection serviceOrderId={id} stage="peca_nova" title="🔧 Peças novas instaladas" />
+          <MediaSection serviceOrderId={id} stage="servico_concluido" title="✅ Serviço realizado / concluído" />
           <div className="panel space-y-2 p-4">
             <Label htmlFor="final">Laudo final entregue ao cliente</Label>
             <Textarea
@@ -499,10 +515,12 @@ function OsDetalhe() {
               }
             />
           </div>
+          <MediaSection serviceOrderId={id} stage="outro" title="📷 Fotos adicionais da execução" />
         </TabsContent>
 
-        <TabsContent value="orcamento" className="mt-3">
+        <TabsContent value="orcamento" className="mt-3 space-y-3">
           <QuotesPanel serviceOrderId={id} onChange={invalidate} />
+          <MediaSection serviceOrderId={id} stage="outro" title="📷 Fotos e documentos do orçamento" />
         </TabsContent>
 
         <TabsContent value="pagamentos" className="mt-3">

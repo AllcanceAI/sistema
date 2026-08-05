@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Car, Clock, FileCheck2, TriangleAlert, Plus, DollarSign, Send, Search, Calendar, CheckSquare, MessageSquare, AlertCircle, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,6 +9,7 @@ import { OS_STATUS_LABELS, ROLE_LABELS, APPROVAL_STAGE_LABELS } from "@/lib/role
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/painel")({
   head: () => ({
@@ -53,6 +54,52 @@ function Painel() {
       if (error) throw new Error(error.message);
       return data ?? [];
     },
+  });
+
+  const editRequests = useQuery({
+    enabled: hasRole(me, "dono", "gerente"),
+    queryKey: ["edit_requests", "pendentes"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("edit_requests")
+        .select(`
+          id, stage, reason, status, service_order_id, created_at, requested_by,
+          service_orders!inner(number),
+          profiles!edit_requests_requested_by_fkey(full_name)
+        `)
+        .is("status", null)
+        .order("created_at");
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+  });
+
+  const queryClient = useQueryClient();
+
+  const approveEditRequest = useMutation({
+    mutationFn: async ({ id, osId, stage }: { id: string; osId: string; stage: string }) => {
+      const { data: userData } = await supabase.auth.getUser();
+      // Mark as approved
+      const { error: reqErr } = await supabase.from("edit_requests").update({
+        status: "aprovado",
+        reviewed_by: userData.user?.id,
+        reviewed_at: new Date().toISOString(),
+      }).eq("id", id);
+      if (reqErr) throw new Error(reqErr.message);
+
+      // Rollback the OS status
+      const newStatus = stage === "entrada" ? "recebido" : "diagnostico";
+      const { error: osErr } = await supabase.from("service_orders").update({
+        status: newStatus
+      }).eq("id", osId);
+      if (osErr) throw new Error(osErr.message);
+    },
+    onSuccess: () => {
+      toast.success("Edição liberada! A etapa foi destrancada na OS.");
+      queryClient.invalidateQueries({ queryKey: ["edit_requests"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const financeiro = useQuery({
@@ -201,6 +248,39 @@ function Painel() {
           <Stat icon={<Car className="size-4" />} label="Minhas ordens" value={mine.length} />
         )}
       </div>
+
+      {hasRole(me, "dono", "gerente") && (editRequests.data ?? []).length > 0 ? (
+        <section className="panel mt-4 p-4 border-amber-200 bg-amber-50 dark:bg-amber-950/10">
+          <h2 className="mb-3 flex items-center gap-2 font-display text-xl text-amber-800 dark:text-amber-500">
+            <TriangleAlert className="size-4" /> Solicitações de Edição (Destrancar Etapa)
+          </h2>
+          <ul className="space-y-3">
+            {(editRequests.data ?? []).map((req: any) => (
+              <li key={req.id} className="rounded-lg bg-background p-3 border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-sm">
+                    OS #{req.service_orders?.number} — Destrancar {req.stage === "entrada" ? "Entrada" : "Diagnóstico"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Solicitado por: {req.profiles?.full_name ?? "Usuário"}
+                  </p>
+                  <p className="text-sm mt-1.5 italic text-amber-900/80 dark:text-amber-200/80">
+                    "{req.reason}"
+                  </p>
+                </div>
+                <Button 
+                  size="sm" 
+                  className="shrink-0 whitespace-nowrap bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={approveEditRequest.isPending}
+                  onClick={() => approveEditRequest.mutate({ id: req.id, osId: req.service_order_id, stage: req.stage })}
+                >
+                  <CheckSquare className="size-4 mr-1.5" /> Liberar Edição
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {minhasPendentes.length > 0 ? (
         <section className="panel mt-4 p-4">
