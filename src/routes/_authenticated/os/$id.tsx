@@ -534,10 +534,10 @@ function OsDetalhe() {
               <Button
                 size="sm"
                 variant="outline"
-                className="shrink-0 border-amber-300 text-amber-700"
-                onClick={() => setEditRequestModal({ stage: "entrada", label: "Entrada do Veículo" })}
+                className="shrink-0 border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                onClick={() => setPinModalOpen(true)}
               >
-                <Send className="size-3.5" /> Solicitar edição
+                <Unlock className="size-3.5 mr-1" /> Senha do gerente
               </Button>
             </div>
           )}
@@ -566,10 +566,10 @@ function OsDetalhe() {
               <Button
                 size="sm"
                 variant="outline"
-                className="shrink-0 border-amber-300 text-amber-700"
-                onClick={() => setEditRequestModal({ stage: "diagnostico", label: "Diagnóstico" })}
+                className="shrink-0 border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                onClick={() => setPinModalOpen(true)}
               >
-                <Send className="size-3.5" /> Solicitar edição
+                <Unlock className="size-3.5 mr-1" /> Senha do gerente
               </Button>
             </div>
           )}
