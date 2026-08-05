@@ -189,7 +189,7 @@ function Painel() {
             <Calendar className="size-5 text-primary" />
             <h2 className="font-display text-lg font-bold">Agenda de Veículos & Confirmação</h2>
           </div>
-          <AgendaChecklist list={list} />
+          <AgendaChecklist />
         </section>
 
         {/* Active OS Panel */}
@@ -329,34 +329,48 @@ function Painel() {
 }
 
 // Sub-component for scheduled checklist & WhatsApp notifications
-function AgendaChecklist({ list }: { list: any[] }) {
+function AgendaChecklist() {
   const [confirmedIds, setConfirmedIds] = useState<Record<string, boolean>>({});
 
-  // Filter service orders that have promised_at set in the future/today
-  const upcoming = list
-    .filter((o) => o.promised_at && ["recebido", "checklist"].includes(o.status))
-    .sort((a, b) => new Date(a.promised_at).getTime() - new Date(b.promised_at).getTime());
+  const agendaQuery = useQuery({
+    queryKey: ["appointments", "painel", "checklist"],
+    queryFn: async () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("*")
+        .in("status", ["agendado", "confirmado"])
+        .gte("scheduled_at", today.toISOString())
+        .order("scheduled_at");
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+  });
+
+  const upcoming = agendaQuery.data ?? [];
 
   const handleSendReminder = (o: any) => {
-    const clientName = o.clients?.name ?? o.companies?.name ?? "Cliente";
-    const rawPhone = o.clients?.phone ?? o.companies?.phone ?? "";
-    const plate = o.vehicles?.plate ?? "Sem Placa";
-    const brandModel = `${o.vehicles?.brand ?? ""} ${o.vehicles?.model ?? ""}`.trim() || "Veículo";
+    const clientName = o.client_name ?? "Cliente";
+    const rawPhone = o.phone ?? "";
+    const plate = o.plate ?? "Sem Placa";
+    const brandModel = o.service ?? "Veículo";
 
-    const dateStr = new Date(o.promised_at).toLocaleString("pt-BR", {
+    const dateStr = new Date(o.scheduled_at).toLocaleString("pt-BR", {
       dateStyle: "short",
       timeStyle: "short",
     });
 
-    // Clean phone number (leave only digits, add 55 country code if not present)
-    let phone = rawPhone.replace(/\D/g, "");
+    let phone = rawPhone ? rawPhone.replace(/\D/g, "") : "";
     if (phone.length === 11 && !phone.startsWith("55")) {
       phone = "55" + phone;
     }
 
-    const message = `Olá, *${clientName}*! Tudo bem? Passando para lembrar do agendamento de manutenção do seu veículo *${brandModel}* (Placa: *${plate}*) marcado para o dia *${dateStr}* na Oficina HM. Confirmamos sua vinda?`;
+    const message = `Olá, *${clientName}*! Tudo bem? Passando para lembrar do agendamento de manutenção do seu veículo (Placa: *${plate}*) marcado para o dia *${dateStr}* na Oficina HM. Confirmamos sua vinda?`;
 
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
+    const whatsappUrl = phone 
+      ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, "_blank");
   };
 
@@ -364,10 +378,14 @@ function AgendaChecklist({ list }: { list: any[] }) {
     setConfirmedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  if (agendaQuery.isLoading) {
+    return <p className="text-center py-6 text-xs text-muted-foreground">Carregando agenda...</p>;
+  }
+
   if (upcoming.length === 0) {
     return (
       <p className="text-center py-6 text-xs text-muted-foreground italic">
-        Nenhum veículo agendado/prometido para as próximas datas.
+        Nenhum veículo agendado/confirmado para as próximas datas.
       </p>
     );
   }
@@ -390,28 +408,28 @@ function AgendaChecklist({ list }: { list: any[] }) {
                 type="button"
                 onClick={() => toggleConfirm(o.id)}
                 className={`mt-0.5 shrink-0 size-5 flex items-center justify-center rounded border transition-colors ${
-                  isConfirmed
+                  isConfirmed || o.status === "confirmado"
                     ? "bg-green-600 border-green-700 text-white"
                     : "border-slate-400 hover:border-slate-500"
                 }`}
                 aria-label="Confirmar presença"
               >
-                {isConfirmed && <CheckSquare className="size-3.5" />}
+                {(isConfirmed || o.status === "confirmado") && <CheckSquare className="size-3.5" />}
               </button>
               <div className="min-w-0 text-sm">
                 <div className="flex items-center gap-1.5">
-                  <span className={`font-semibold tracking-wide uppercase ${isConfirmed ? "line-through text-muted-foreground" : ""}`}>
-                    {o.vehicles?.plate ?? "SEM PLACA"}
+                  <span className={`font-semibold tracking-wide uppercase ${isConfirmed || o.status === "confirmado" ? "line-through text-muted-foreground" : ""}`}>
+                    {o.plate ?? "SEM PLACA"}
                   </span>
                   <Badge variant="outline" className="text-[10px] h-4">
-                    {new Date(o.promised_at).toLocaleDateString("pt-BR")}
+                    {new Date(o.scheduled_at).toLocaleDateString("pt-BR")}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {o.vehicles?.brand ?? ""} {o.vehicles?.model ?? ""}
+                  {o.service ?? "Serviço não especificado"}
                 </p>
                 <p className="text-xs font-semibold text-primary mt-1 truncate">
-                  {o.clients?.name ?? o.companies?.name ?? "Particular"}
+                  {o.client_name ?? "Particular"}
                 </p>
               </div>
             </div>
