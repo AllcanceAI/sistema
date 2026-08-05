@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PrintableQuote } from "@/components/PrintableQuote";
 import {
   Select,
   SelectContent,
@@ -1162,8 +1163,24 @@ function QuotesPanel({
   const { data: me } = useMe();
   const queryClient = useQueryClient();
   const visible = can(me, "ver_financeiro") || hasRole(me, "secretaria");
-  const [quote, setQuote] = useState({ parts: "", labor: "", discount: "", paymentMethod: "dinheiro", notes: "" });
+  
+  const [items, setItems] = useState<{ id: string, kind: "peca" | "servico", description: string, quantity: number, unit_price: number, total: number }[]>([]);
+  const [newItem, setNewItem] = useState({ kind: "peca", description: "", quantity: 1, unit_price: "" });
+  const [discount, setDiscount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("dinheiro");
+  const [notes, setNotes] = useState("");
+  
   const [po, setPo] = useState({ supplier: "", description: "", total: "" });
+  const [printingQuoteId, setPrintingQuoteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (printingQuoteId) {
+      setTimeout(() => {
+        window.print();
+        setPrintingQuoteId(null);
+      }, 500); // Wait for render
+    }
+  }, [printingQuoteId]);
 
   const quotes = useQuery({
     enabled: visible,
@@ -1171,7 +1188,7 @@ function QuotesPanel({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("quotes")
-        .select("*")
+        .select("*, quote_items(*)")
         .eq("service_order_id", serviceOrderId)
         .order("created_at", { ascending: false });
       if (error) throw new Error(error.message);
@@ -1193,34 +1210,78 @@ function QuotesPanel({
     },
   });
 
+  const handleAddItem = () => {
+    if (!newItem.description) {
+      toast.error("Informe a descrição do item");
+      return;
+    }
+    const up = Number(newItem.unit_price) || 0;
+    const qty = Number(newItem.quantity) || 1;
+    if (up <= 0) {
+      toast.error("Informe um preço válido");
+      return;
+    }
+    setItems([...items, {
+      id: crypto.randomUUID(),
+      kind: newItem.kind as "peca" | "servico",
+      description: newItem.description.trim(),
+      quantity: qty,
+      unit_price: up,
+      total: up * qty
+    }]);
+    setNewItem({ kind: "peca", description: "", quantity: 1, unit_price: "" });
+  };
+
+  const removeItem = (id: string) => {
+    setItems(items.filter(i => i.id !== id));
+  };
+
+  const partsTotal = items.filter(i => i.kind === "peca").reduce((sum, i) => sum + i.total, 0);
+  const laborTotal = items.filter(i => i.kind === "servico").reduce((sum, i) => sum + i.total, 0);
+
   const createQuote = useMutation({
     mutationFn: async () => {
-      const parts = Number(quote.parts || 0);
-      const labor = Number(quote.labor || 0);
-      const discount = Number(quote.discount || 0);
+      const disc = Number(discount || 0);
       
-      let finalNotes = quote.notes.trim();
+      let finalNotes = notes.trim();
       const headers = [];
-      if (discount > 0) headers.push(`Desconto concedido: R$ ${discount.toFixed(2)}`);
-      if (quote.paymentMethod) headers.push(`Forma de pagamento: ${quote.paymentMethod.toUpperCase()}`);
+      if (disc > 0) headers.push(`Desconto concedido: R$ ${disc.toFixed(2)}`);
+      if (paymentMethod) headers.push(`Forma de pagamento: ${paymentMethod.toUpperCase()}`);
       
       if (headers.length > 0) {
         finalNotes = `${headers.join(" | ")}\n\n${finalNotes}`.trim();
       }
 
       const { data: userData } = await supabase.auth.getUser();
-      const { error } = await supabase.from("quotes").insert({
+      const { data: quoteData, error: quoteError } = await supabase.from("quotes").insert({
         service_order_id: serviceOrderId,
-        parts_total: parts,
-        labor_total: labor,
-        total: Math.max(0, parts + labor - discount),
+        parts_total: partsTotal,
+        labor_total: laborTotal,
+        total: Math.max(0, partsTotal + laborTotal - disc),
         notes: finalNotes || null,
         created_by: userData.user?.id ?? null,
-      });
-      if (error) throw new Error(error.message);
+      }).select("id").single();
+      
+      if (quoteError) throw new Error(quoteError.message);
+
+      if (items.length > 0) {
+        const { error: itemsError } = await supabase.from("quote_items").insert(
+          items.map(i => ({
+            quote_id: quoteData.id,
+            kind: i.kind,
+            description: i.description,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+            total: i.total
+          }))
+        );
+        if (itemsError) throw new Error(itemsError.message);
+      }
     },
     onSuccess: () => {
-      setQuote({ parts: "", labor: "", discount: "", paymentMethod: "dinheiro", notes: "" });
+      setItems([]);
+      setDiscount("");
+      setNotes("");
       toast.success("Orçamento lançado.");
       queryClient.invalidateQueries({ queryKey: ["quotes", serviceOrderId] });
       onChange();
@@ -1259,49 +1320,89 @@ function QuotesPanel({
 
   return (
     <div className="space-y-3">
+      {printingQuoteId && (
+        <PrintableQuote osData={osData} quote={quotes.data?.find(q => q.id === printingQuoteId)} />
+      )}
+
       <div className="panel space-y-3 p-4">
         <h2 className="font-display text-lg">Novo orçamento</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="parts">Peças (R$)</Label>
-            <Input
-              id="parts"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              value={quote.parts}
-              onChange={(e) => setQuote({ ...quote, parts: e.target.value })}
+        
+        <div className="bg-slate-50 p-3 rounded-md border space-y-2">
+          <div className="flex gap-2">
+            <Select value={newItem.kind} onValueChange={(v) => setNewItem({ ...newItem, kind: v })}>
+              <SelectTrigger className="w-[120px] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="peca">Peça</SelectItem>
+                <SelectItem value="servico">Serviço</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input 
+              placeholder="Descrição do item" 
+              className="flex-1 bg-white"
+              value={newItem.description}
+              onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="labor">Mão de obra (R$)</Label>
-            <Input
-              id="labor"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              value={quote.labor}
-              onChange={(e) => setQuote({ ...quote, labor: e.target.value })}
-            />
+          <div className="flex gap-2 items-end">
+            <div className="w-[80px]">
+              <Label className="text-[10px]">Qtd</Label>
+              <Input type="number" min="1" className="bg-white" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} />
+            </div>
+            <div className="flex-1">
+              <Label className="text-[10px]">Preço Unitário (R$)</Label>
+              <Input type="number" step="0.01" className="bg-white" value={newItem.unit_price} onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })} />
+            </div>
+            <Button type="button" variant="secondary" onClick={handleAddItem}>Adicionar</Button>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+
+        {items.length > 0 && (
+          <div className="border rounded-md overflow-hidden text-sm">
+            <table className="w-full text-left">
+              <thead className="bg-slate-100 text-xs">
+                <tr>
+                  <th className="p-2 font-medium">Item</th>
+                  <th className="p-2 font-medium text-right">Preço</th>
+                  <th className="p-2 w-8"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {items.map(i => (
+                  <tr key={i.id}>
+                    <td className="p-2">
+                      <div className="font-medium">{i.description}</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{i.kind} • Qtd: {i.quantity}</div>
+                    </td>
+                    <td className="p-2 text-right">{brl(i.total)}</td>
+                    <td className="p-2 text-right">
+                      <button onClick={() => removeItem(i.id)} className="text-red-500 hover:text-red-700">
+                        <XCircle className="size-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2 mt-4">
           <div className="space-y-2">
-            <Label htmlFor="discount">Desconto (R$)</Label>
+            <Label htmlFor="discount">Desconto Global (R$)</Label>
             <Input
               id="discount"
               type="number"
               inputMode="decimal"
               step="0.01"
-              value={quote.discount}
-              onChange={(e) => setQuote({ ...quote, discount: e.target.value })}
+              value={discount}
+              onChange={(e) => setDiscount(e.target.value)}
             />
           </div>
           <div className="space-y-2">
             <Label>Forma de pagamento</Label>
             <Select
-              value={quote.paymentMethod}
-              onValueChange={(v) => setQuote({ ...quote, paymentMethod: v })}
+              value={paymentMethod}
+              onValueChange={(v) => setPaymentMethod(v)}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -1317,13 +1418,20 @@ function QuotesPanel({
         </div>
         <Textarea
           rows={3}
-          placeholder="Itens e observações do orçamento"
-          value={quote.notes}
-          onChange={(e) => setQuote({ ...quote, notes: e.target.value })}
+          placeholder="Observações do orçamento"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
         />
-        <Button className="w-full" onClick={() => createQuote.mutate()} disabled={createQuote.isPending}>
-          Lançar orçamento
-        </Button>
+        
+        <div className="flex justify-between items-center py-2 border-t">
+          <div className="text-sm">
+            <p className="text-muted-foreground">Peças: {brl(partsTotal)} | M.O: {brl(laborTotal)}</p>
+            <p className="font-bold text-lg text-primary">Total: {brl(Math.max(0, partsTotal + laborTotal - Number(discount || 0)))}</p>
+          </div>
+          <Button className="w-1/2" onClick={() => createQuote.mutate()} disabled={createQuote.isPending || items.length === 0}>
+            Lançar orçamento
+          </Button>
+        </div>
       </div>
 
       {(quotes.data ?? []).map((q) => {
@@ -1344,27 +1452,50 @@ function QuotesPanel({
 
         return (
           <div key={q.id} className="panel p-4 text-sm relative">
-            {osData && (
+            <div className="absolute top-4 right-4 flex gap-2">
+              {osData && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8 px-2"
+                  onClick={handleSendQuote}
+                >
+                  <Send className="size-3 mr-1.5" /> WhatsApp
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
-                className="absolute top-4 right-4 text-xs h-8 px-2"
-                onClick={handleSendQuote}
+                className="text-xs h-8 px-2"
+                onClick={() => setPrintingQuoteId(q.id)}
               >
-                <Send className="size-3 mr-1.5" /> Enviar Cliente
+                <Printer className="size-3 mr-1.5" /> Imprimir
               </Button>
-            )}
+            </div>
             <p className="font-display text-2xl leading-none text-primary">{brl(Number(q.total))}</p>
-            <p className="mt-1 text-xs text-muted-foreground pr-32">
+            <p className="mt-1 text-xs text-muted-foreground pr-48">
               Peças {brl(Number(q.parts_total))} · Mão de obra {brl(Number(q.labor_total))} ·{" "}
               {new Date(q.created_at).toLocaleDateString("pt-BR")}
             </p>
-            {q.notes ? <p className="mt-2 whitespace-pre-wrap">{q.notes}</p> : null}
+            
+            {q.quote_items && q.quote_items.length > 0 && (
+              <div className="mt-3 bg-slate-50 border rounded p-2 text-xs">
+                {q.quote_items.map((i: any) => (
+                  <div key={i.id} className="flex justify-between border-b last:border-0 py-1">
+                    <div className="truncate pr-4 flex-1">{i.description}</div>
+                    <div className="w-12 text-right">{i.quantity}x</div>
+                    <div className="w-20 text-right font-medium">{brl(Number(i.total))}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {q.notes ? <p className="mt-3 whitespace-pre-wrap">{q.notes}</p> : null}
           </div>
         );
       })}
 
-      <div className="panel space-y-3 p-4">
+      <div className="panel space-y-3 p-4 print:hidden">
         <h2 className="font-display text-lg">Pedido de compra de peças</h2>
         <Input
           placeholder="Fornecedor"
@@ -1391,7 +1522,7 @@ function QuotesPanel({
       </div>
 
       {(purchases.data ?? []).map((p) => (
-        <div key={p.id} className="panel p-4 text-sm">
+        <div key={p.id} className="panel p-4 text-sm print:hidden">
           <div className="flex items-center justify-between">
             <p className="font-medium">{p.supplier ?? "Fornecedor não informado"}</p>
             <Badge variant="outline">{p.status}</Badge>
