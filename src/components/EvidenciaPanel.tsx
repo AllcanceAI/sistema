@@ -174,8 +174,8 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
                   Constatação do Defeito (Antes)
                 </span>
                 <div className="grid grid-cols-2 gap-2">
-                  {mediaBefore.slice(0, 4).map(m => (
-                    <div key={m.id} className="flex flex-col border rounded bg-slate-50 overflow-hidden">
+                  {mediaBefore.map(m => (
+                    <div key={m.id} className="flex flex-col border rounded bg-slate-50 overflow-hidden break-inside-avoid">
                       <div className="relative aspect-square">
                         <img src={m.url} alt="Antes" className="w-full h-full object-cover" />
                       </div>
@@ -200,8 +200,8 @@ export function EvidenciaPanel({ serviceOrderId }: { serviceOrderId: string }) {
                   Serviço Concluído / Peça Nova (Depois)
                 </span>
                 <div className="grid grid-cols-2 gap-2">
-                  {mediaAfter.slice(0, 4).map(m => (
-                    <div key={m.id} className="flex flex-col border rounded bg-slate-50 overflow-hidden">
+                  {mediaAfter.map(m => (
+                    <div key={m.id} className="flex flex-col border rounded bg-slate-50 overflow-hidden break-inside-avoid">
                       <div className="relative aspect-square">
                         <img src={m.url} alt="Depois" className="w-full h-full object-cover" />
                       </div>
