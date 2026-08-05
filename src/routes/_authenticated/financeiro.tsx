@@ -180,6 +180,35 @@ function Financeiro() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const purchases = useQuery({
+    enabled: allowed,
+    queryKey: ["caixa", "purchases", from, to],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("purchase_orders")
+        .select("*, service_orders(number)")
+        .gte("created_at", `${from}T00:00:00.000Z`)
+        .lte("created_at", `${to}T23:59:59.999Z`)
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return data as any[];
+    },
+  });
+
+  const supplierStats = useMemo(() => {
+    const stats: Record<string, { totalPago: number, totalPendente: number }> = {};
+    for (const p of (purchases.data || [])) {
+      const sup = p.supplier || "Fornecedor não informado";
+      if (!stats[sup]) stats[sup] = { totalPago: 0, totalPendente: 0 };
+      if (p.status === "pago") {
+        stats[sup].totalPago += Number(p.total);
+      } else {
+        stats[sup].totalPendente += Number(p.total);
+      }
+    }
+    return Object.entries(stats).map(([name, s]) => ({ name, ...s })).sort((a, b) => (b.totalPago + b.totalPendente) - (a.totalPago + a.totalPendente));
+  }, [purchases.data]);
+
   const totals = useMemo(() => {
     const entrada = (payments.data ?? []).reduce((s, p) => s + Number(p.amount), 0);
     const saida = (expenses.data ?? []).reduce((s, e) => s + Number(e.amount), 0);
@@ -242,6 +271,9 @@ function Financeiro() {
           </TabsTrigger>
           <TabsTrigger value="saidas" className="flex-1">
             Saídas
+          </TabsTrigger>
+          <TabsTrigger value="fornecedores" className="flex-1">
+            Fornecedores
           </TabsTrigger>
         </TabsList>
 
@@ -368,6 +400,66 @@ function Financeiro() {
             {(expenses.data ?? []).length === 0 ? (
               <p className="p-6 text-center text-sm text-muted-foreground">
                 Nenhuma despesa no período.
+              </p>
+            ) : null}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="fornecedores" className="mt-3">
+          <section className="panel divide-y p-0">
+            {purchases.isLoading ? (
+              <Loader2 className="mx-auto my-8 size-5 animate-spin text-muted-foreground" />
+            ) : null}
+            
+            {supplierStats.length > 0 && (
+              <div className="p-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 bg-muted/30 border-b">
+                {supplierStats.map(s => (
+                  <div key={s.name} className="bg-background border rounded p-3 shadow-sm">
+                    <p className="font-medium truncate">{s.name}</p>
+                    <div className="flex justify-between mt-2 text-sm">
+                      <span className="text-muted-foreground">Pago:</span>
+                      <span className="font-medium text-green-600">{brl(s.totalPago)}</span>
+                    </div>
+                    <div className="flex justify-between mt-1 text-sm">
+                      <span className="text-muted-foreground">Pendente:</span>
+                      <span className="font-medium text-amber-600">{brl(s.totalPendente)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {(purchases.data ?? []).map((p) => {
+              let meta = { refCode: "", term: "" };
+              try { meta = JSON.parse(p.description || "{}"); } catch(e) {}
+
+              return (
+                <div key={p.id} className="flex items-center gap-3 p-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <p className="font-display text-lg leading-none">{brl(Number(p.total))}</p>
+                      <span className="text-[10px] text-muted-foreground uppercase">{meta.term === "a_prazo" ? "A Prazo" : meta.term === "a_vista" ? "À Vista" : ""}</span>
+                    </div>
+                    <p className="truncate text-sm font-medium mt-1">
+                      {p.supplier || "Fornecedor não informado"}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground mt-0.5">
+                      OS #{p.service_orders?.number ?? "—"}
+                      {meta.refCode ? ` · Ref: ${meta.refCode}` : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(p.created_at).toLocaleString("pt-BR", { dateStyle: "short" })}
+                    </p>
+                  </div>
+                  <Badge variant={p.status === "pago" ? "secondary" : "outline"} className={p.status === "pago" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
+                    {p.status === "pago" ? "Pago" : "Pendente"}
+                  </Badge>
+                </div>
+              );
+            })}
+            {!purchases.isLoading && (purchases.data ?? []).length === 0 ? (
+              <p className="p-6 text-center text-sm text-muted-foreground">
+                Nenhum pedido de compra no período.
               </p>
             ) : null}
           </section>

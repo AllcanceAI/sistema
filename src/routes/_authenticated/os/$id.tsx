@@ -1172,7 +1172,7 @@ function QuotesPanel({
   const [paymentMethod, setPaymentMethod] = useState("dinheiro");
   const [notes, setNotes] = useState("");
   
-  const [po, setPo] = useState({ supplier: "", description: "", total: "" });
+  const [po, setPo] = useState({ supplier: "", description: "", total: "", refCode: "", term: "a_vista", paymentStatus: "pendente" });
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
   const [printState, setPrintState] = useState<{ id: string, action: "pdf" | "image" } | null>(null);
 
@@ -1340,20 +1340,61 @@ function QuotesPanel({
   const createPo = useMutation({
     mutationFn: async () => {
       const { data: userData } = await supabase.auth.getUser();
+      const descJson = JSON.stringify({
+        text: po.description.trim(),
+        refCode: po.refCode.trim(),
+        term: po.term
+      });
+
       const { error } = await supabase.from("purchase_orders").insert({
         service_order_id: serviceOrderId,
         supplier: po.supplier.trim() || null,
-        description: po.description.trim() || null,
+        description: descJson,
+        status: po.paymentStatus,
         total: Number(po.total || 0),
         created_by: userData.user?.id ?? null,
       });
       if (error) throw new Error(error.message);
+
+      if (po.paymentStatus === "pago") {
+        await supabase.from("expenses").insert({
+          description: `Peça OS #${osData?.number} - Fornecedor: ${po.supplier}`,
+          category: "pecas",
+          amount: Number(po.total || 0),
+          spent_at: new Date().toISOString(),
+          created_by: userData.user?.id ?? null,
+        });
+      }
     },
     onSuccess: () => {
-      setPo({ supplier: "", description: "", total: "" });
+      setPo({ supplier: "", description: "", total: "", refCode: "", term: "a_vista", paymentStatus: "pendente" });
       toast.success("Pedido de compra registrado.");
       queryClient.invalidateQueries({ queryKey: ["purchase_orders", serviceOrderId] });
+      queryClient.invalidateQueries({ queryKey: ["caixa"] });
       onChange();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const payPo = useMutation({
+    mutationFn: async (p: any) => {
+      const { data: userData } = await supabase.auth.getUser();
+      
+      const { error } = await supabase.from("purchase_orders").update({ status: "pago" }).eq("id", p.id);
+      if (error) throw new Error(error.message);
+
+      await supabase.from("expenses").insert({
+        description: `Peça OS #${osData?.number} - Fornecedor: ${p.supplier}`,
+        category: "pecas",
+        amount: Number(p.total || 0),
+        spent_at: new Date().toISOString(),
+        created_by: userData.user?.id ?? null,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Pagamento do fornecedor registrado no caixa.");
+      queryClient.invalidateQueries({ queryKey: ["purchase_orders", serviceOrderId] });
+      queryClient.invalidateQueries({ queryKey: ["caixa"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -1590,40 +1631,76 @@ function QuotesPanel({
 
       <div className="panel space-y-3 p-4 print:hidden">
         <h2 className="font-display text-lg">Pedido de compra de peças</h2>
-        <Input
-          placeholder="Fornecedor"
-          value={po.supplier}
-          onChange={(e) => setPo({ ...po, supplier: e.target.value })}
-        />
-        <Textarea
-          rows={2}
-          placeholder="Peças solicitadas"
-          value={po.description}
-          onChange={(e) => setPo({ ...po, description: e.target.value })}
-        />
-        <Input
-          type="number"
-          step="0.01"
-          inputMode="decimal"
-          placeholder="Valor total"
-          value={po.total}
-          onChange={(e) => setPo({ ...po, total: e.target.value })}
-        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input placeholder="Fornecedor" value={po.supplier} onChange={(e) => setPo({ ...po, supplier: e.target.value })} />
+          <Input placeholder="Cód. Referência (Opcional)" value={po.refCode} onChange={(e) => setPo({ ...po, refCode: e.target.value })} />
+        </div>
+        <Textarea rows={2} placeholder="Peças solicitadas" value={po.description} onChange={(e) => setPo({ ...po, description: e.target.value })} />
+        
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Valor Total (R$)</Label>
+            <Input type="number" step="0.01" inputMode="decimal" placeholder="0.00" value={po.total} onChange={(e) => setPo({ ...po, total: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Forma de Pagto</Label>
+            <Select value={po.term} onValueChange={(v) => setPo({ ...po, term: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="a_vista">À vista</SelectItem>
+                <SelectItem value="a_prazo">A prazo</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Status</Label>
+            <Select value={po.paymentStatus} onValueChange={(v) => setPo({ ...po, paymentStatus: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="pago">Já Pago</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
         <Button variant="secondary" className="w-full" onClick={() => createPo.mutate()} disabled={createPo.isPending}>
           Registrar pedido de compra
         </Button>
       </div>
 
-      {(purchases.data ?? []).map((p) => (
-        <div key={p.id} className="panel p-4 text-sm print:hidden">
-          <div className="flex items-center justify-between">
-            <p className="font-medium">{p.supplier ?? "Fornecedor não informado"}</p>
-            <Badge variant="outline">{p.status}</Badge>
+      {(purchases.data ?? []).map((p) => {
+        let meta = { text: p.description, refCode: "", term: "" };
+        try { meta = JSON.parse(p.description || "{}"); } catch(e) {}
+        if (!meta.text) meta.text = p.description;
+
+        return (
+          <div key={p.id} className="panel p-4 text-sm print:hidden">
+            <div className="flex items-center justify-between">
+              <p className="font-medium">{p.supplier ?? "Fornecedor não informado"}</p>
+              <Badge variant={p.status === "pago" ? "secondary" : "outline"} className={p.status === "pago" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
+                {p.status === "pago" ? "Pago" : "Pendente"}
+              </Badge>
+            </div>
+            
+            <div className="flex justify-between items-center mt-1">
+              <p className="font-display text-lg leading-none">{brl(Number(p.total))}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">
+                {meta.term === "a_prazo" ? "A Prazo" : meta.term === "a_vista" ? "À Vista" : ""}
+              </p>
+            </div>
+            
+            {meta.refCode ? <p className="text-xs font-mono text-muted-foreground mt-1">Ref: {meta.refCode}</p> : null}
+            {meta.text ? <p className="mt-2 whitespace-pre-wrap">{meta.text}</p> : null}
+
+            {p.status !== "pago" && (
+              <Button size="sm" variant="outline" className="w-full mt-3 gap-2" onClick={() => payPo.mutate(p)} disabled={payPo.isPending}>
+                <CheckCircle2 className="size-4" /> Marcar como Pago e Baixar Caixa
+              </Button>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground">{brl(Number(p.total))}</p>
-          {p.description ? <p className="mt-1 whitespace-pre-wrap">{p.description}</p> : null}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
