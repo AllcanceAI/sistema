@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Send, LogIn } from "lucide-react";
+import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Send, LogIn, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -178,6 +178,19 @@ function OsDetalhe() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const deleteOrder = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("service_orders").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Ordem de serviço excluída!");
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      window.location.href = "/ao-vivo"; // Go back to pista
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const sendEditRequest = useMutation({
     mutationFn: async ({ stage, reason }: { stage: string; reason: string }) => {
       const { data: userData } = await supabase.auth.getUser();
@@ -280,11 +293,45 @@ function OsDetalhe() {
       title={`${os.vehicles?.plate ?? "Sem placa"} · #${os.number}`}
       subtitle={`${os.mode === "express" ? "Express" : "Análise completa"} · ${OS_STATUS_LABELS[os.status]}`}
       action={
-        <Button asChild variant="outline" size="sm">
-          <Link to="/imprimir/$id" params={{ id }}>
-            <Printer className="size-4" /> Imprimir
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {editable && os.status !== "cancelado" && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 font-bold"
+              onClick={() => {
+                if (confirm("Tem certeza que deseja registrar DESISTÊNCIA (cancelar) este serviço? Ele sairá da pista.")) {
+                  updateOrder.mutate({ status: "cancelado" });
+                }
+              }}
+              disabled={updateOrder.isPending}
+            >
+              <XCircle className="size-4 mr-1" /> Desistência
+            </Button>
+          )}
+
+          {(hasRole(me, "dono") || hasRole(me, "gerente")) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-200 text-red-600 hover:bg-red-50 font-bold"
+              onClick={() => {
+                if (confirm("ATENÇÃO: Tem certeza absoluta que deseja EXCLUIR DEFINITIVAMENTE esta OS do sistema por erro de digitação? Essa ação não pode ser desfeita!")) {
+                  deleteOrder.mutate();
+                }
+              }}
+              disabled={deleteOrder.isPending}
+            >
+              <Trash2 className="size-4 mr-1" /> Excluir OS
+            </Button>
+          )}
+
+          <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
+            <Link to="/imprimir/$id" params={{ id }}>
+              <Printer className="size-4 mr-1" /> Imprimir
+            </Link>
+          </Button>
+        </div>
       }
     >
       {/* General OS info panel */}
