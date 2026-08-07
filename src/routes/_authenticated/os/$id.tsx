@@ -95,6 +95,9 @@ function OsDetalhe() {
   const [pinInput, setPinInput] = useState("");
   const MANAGER_PIN = "2512";
 
+  const [editInfoModalOpen, setEditInfoModalOpen] = useState(false);
+  const [editInfo, setEditInfo] = useState({ plate: "", clientName: "", complaint: "" });
+
   const order = useQuery({
     queryKey: ["order", id],
     queryFn: async () => {
@@ -184,6 +187,40 @@ function OsDetalhe() {
       invalidate();
     },
     onError: (error: Error) => toast.error(error.message),
+  });
+
+  const updateInfo = useMutation({
+    mutationFn: async () => {
+      const osData = order.data;
+      if (!osData) return;
+      
+      // Update vehicle plate
+      if (editInfo.plate && editInfo.plate !== osData.vehicles?.plate && osData.vehicle_id) {
+         const { error } = await supabase.from('vehicles').update({ plate: editInfo.plate.trim().toUpperCase() }).eq('id', osData.vehicle_id);
+         if (error) throw new Error("Erro ao atualizar placa: " + error.message);
+      }
+      // Update client name
+      if (editInfo.clientName && osData.client_id && editInfo.clientName !== osData.clients?.name) {
+         const { error } = await supabase.from('clients').update({ name: editInfo.clientName.trim() }).eq('id', osData.client_id);
+         if (error) throw new Error("Erro ao atualizar cliente: " + error.message);
+      }
+      // Update company name
+      if (editInfo.clientName && osData.company_id && editInfo.clientName !== osData.companies?.name) {
+         const { error } = await supabase.from('companies').update({ name: editInfo.clientName.trim() }).eq('id', osData.company_id);
+         if (error) throw new Error("Erro ao atualizar empresa: " + error.message);
+      }
+      // Update complaint
+      if (editInfo.complaint !== osData.complaint) {
+         const { error } = await supabase.from('service_orders').update({ complaint: editInfo.complaint.trim() }).eq('id', osData.id);
+         if (error) throw new Error("Erro ao atualizar reclamação: " + error.message);
+      }
+    },
+    onSuccess: () => {
+      toast.success("Informações da OS atualizadas!");
+      setEditInfoModalOpen(false);
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message)
   });
 
   const deleteOrder = useMutation({
@@ -321,6 +358,24 @@ function OsDetalhe() {
               onClick={() => setOverrideActive(false)}
             >
               <Unlock className="size-4 mr-1" /> Modo Gerente Ativo
+            </Button>
+          )}
+
+          {editable && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="font-bold border-blue-200 text-blue-600 hover:bg-blue-50"
+              onClick={() => {
+                setEditInfo({
+                  plate: os.vehicles?.plate ?? "",
+                  clientName: os.companies?.name ?? os.clients?.name ?? "",
+                  complaint: os.complaint ?? ""
+                });
+                setEditInfoModalOpen(true);
+              }}
+            >
+              <Pen className="size-4 mr-1" /> Editar Dados
             </Button>
           )}
 
@@ -750,6 +805,50 @@ function OsDetalhe() {
               }}
             >
               Desbloquear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Edit Info Modal */}
+      <Dialog open={editInfoModalOpen} onOpenChange={setEditInfoModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Dados da OS</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="editPlate">Placa do Veículo</Label>
+              <Input
+                id="editPlate"
+                value={editInfo.plate}
+                onChange={(e) => setEditInfo({ ...editInfo, plate: e.target.value })}
+                className="uppercase"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editClient">Nome do Cliente / Empresa</Label>
+              <Input
+                id="editClient"
+                value={editInfo.clientName}
+                onChange={(e) => setEditInfo({ ...editInfo, clientName: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editComplaint">Reclamação</Label>
+              <Textarea
+                id="editComplaint"
+                value={editInfo.complaint}
+                onChange={(e) => setEditInfo({ ...editInfo, complaint: e.target.value })}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditInfoModalOpen(false)}>Cancelar</Button>
+            <Button onClick={() => updateInfo.mutate()} disabled={updateInfo.isPending}>
+              {updateInfo.isPending ? <Loader2 className="size-4 animate-spin mr-2" /> : <Save className="size-4 mr-2" />}
+              Salvar Alterações
             </Button>
           </DialogFooter>
         </DialogContent>
