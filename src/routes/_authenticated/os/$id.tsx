@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import * as htmlToImage from "html-to-image";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Loader2, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Unlock, Send, LogIn, Trash2, XCircle, Pencil, Image as ImageIcon } from "lucide-react";
+import { Loader2, Pen, PenLine, Printer, ShieldCheck, ThumbsDown, ThumbsUp, Wrench, CheckCircle2, User, Clock, Camera, Lock, Unlock, Send, LogIn, Trash2, XCircle, Pencil, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
